@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>人生リプレイ：あの日の選択</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23fff0c7'/%3E%3Cpath d='M12 40c12-14 26 10 40-8v16H12z' fill='%233f9b77'/%3E%3Ccircle cx='44' cy='18' r='8' fill='%23ffd36b'/%3E%3Cpath d='M20 34h18v14H20z' fill='%23ffffff'/%3E%3Cpath d='M18 34l11-9 11 9z' fill='%23d66755'/%3E%3C/svg%3E" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="topbar">
+        <div>
+          <p class="eyebrow">人生リプレイ</p>
+          <h1>あの日の選択</h1>
+        </div>
+        <div class="turn-badge">
+          <span id="stageName">小学校</span>
+          <strong id="turnLabel">1 / 45</strong>
+        </div>
+      </section>
+
+      <section class="game-grid">
+        <aside class="panel status-panel">
+          <div class="month-card">
+            <span id="yearLabel">小1 4月</span>
+            <strong id="chapterTitle">入学式</strong>
+          </div>
+          <div class="stats" id="stats"></div>
+          <button class="ghost-button" id="albumButton" type="button">人生アルバム</button>
+        </aside>
+
+        <section class="panel play-panel">
+          <div class="scene-art" aria-hidden="true">
+            <svg viewBox="0 0 620 190" role="img">
+              <defs>
+                <linearGradient id="sky" x1="0" y1="0" x2="1" y2="1">
+                  <stop offset="0" stop-color="#d7f1ff" />
+                  <stop offset="1" stop-color="#fff0c7" />
+                </linearGradient>
+              </defs>
+              <rect width="620" height="190" rx="16" fill="url(#sky)" />
+              <circle cx="514" cy="45" r="24" fill="#ffd36b" />
+              <path d="M0 143 C94 104 174 177 276 132 C394 80 488 141 620 99 L620 190 L0 190Z" fill="#7ac7a1" />
+              <path d="M0 160 C100 131 189 188 298 154 C407 119 515 161 620 135 L620 190 L0 190Z" fill="#f2cf79" />
+              <path d="M84 126 h72 v47 h-72z" fill="#fff7e1" />
+              <path d="M75 126 l45 -34 l45 34z" fill="#e8795d" />
+              <rect x="105" y="140" width="19" height="33" fill="#6b7b90" />
+              <path d="M402 111 q33 -47 66 0 v62 h-66z" fill="#9dc0ff" />
+              <path d="M428 173 v-42 h18 v42" fill="#526179" />
+              <circle cx="259" cy="137" r="13" fill="#31536d" />
+              <path d="M259 150 v30 M241 164 h36 M251 180 l-15 10 M267 180 l15 10" stroke="#31536d" stroke-width="7" stroke-linecap="round" />
+            </svg>
+          </div>
+          <div id="message" class="message"></div>
+          <div id="chanceBox" class="chance-box hidden"></div>
+          <div id="choices" class="choice-list"></div>
+          <div class="action-footer">
+            <button id="shopButton" class="secondary-button" type="button">お金を使う</button>
+            <button id="resetButton" class="secondary-button" type="button">もう一度</button>
+          </div>
+        </section>
+
+        <aside class="panel side-panel">
+          <h2>イベントログ</h2>
+          <div id="logList" class="log-list"></div>
+          <h2>獲得カード</h2>
+          <div id="latestCards" class="mini-cards"></div>
+        </aside>
+      </section>
+    </main>
+
+    <div class="modal-backdrop hidden" id="modalBackdrop">
+      <section class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+        <button class="icon-button" id="closeModal" type="button" aria-label="閉じる">×</button>
+        <h2 id="modalTitle"></h2>
+        <div id="modalBody"></div>
+      </section>
+    </div>
+
+    <script src="game.js"></script>
+  </body>
+</html>

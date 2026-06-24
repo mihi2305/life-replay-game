@@ -1,0 +1,11 @@
+{
+  "name": "life-replay",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "python3 -m http.server 5173",
+    "start": "python3 -m http.server 5173",
+    "build": "node --check game.js",
+    "check": "node --check game.js"
+  }
+}
