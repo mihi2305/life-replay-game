@@ -66,15 +66,27 @@ git push
 
 ## 未実装の機能
 
-今回は、ゲーム本体をGitHub管理・Vercel公開しやすい形に整理することを優先しています。
+現在は匿名プレイヤーIDを使った周回履歴・カード図鑑保存の土台があります。
+Supabase設定がない場合は、localStorageへ保存されます。
 
-以下はまだ実装していません。
+Supabaseを使う場合は、`index.html` の以下を設定してください。
 
-- セーブ機能
-- リロード復元
+```html
+window.LIFE_REPLAY_SUPABASE_CONFIG = {
+  url: "https://YOUR_PROJECT.supabase.co",
+  anonKey: "YOUR_SUPABASE_ANON_KEY"
+};
+```
+
+データベース作成SQLは [supabase/schema.sql](supabase/schema.sql) にあります。
+
+まだ実装していないもの:
+
 - Supabase Auth連携
-- Supabase Database連携
-- ユーザーごとのプレイ履歴保存
+- Googleログイン
+- メール認証
+- ユーザー認証に基づく厳密なRLS
+- 現在進行中データの自動リロード復元
 
 ## 今後の予定
 
@@ -87,4 +99,5 @@ git push
 
 ## 注意
 
-現在のゲームはクライアント内だけで完結します。プレイ結果や進行状況はサーバーには保存されません。
+匿名ID方式はログインなしで手軽に使えますが、厳密な本人性やセキュリティはありません。
+本番運用では Supabase Auth の user_id へ移行する想定です。

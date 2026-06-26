@@ -28,6 +28,8 @@
           </div>
           <div class="stats" id="stats"></div>
           <button class="ghost-button" id="albumButton" type="button">人生アルバム</button>
+          <button class="ghost-button" id="historyButton" type="button">過去の人生</button>
+          <button class="ghost-button" id="catalogButton" type="button">カード図鑑</button>
         </aside>
 
         <section class="panel play-panel">
@@ -78,6 +80,13 @@
       </section>
     </div>
 
+    <script>
+      window.LIFE_REPLAY_SUPABASE_CONFIG = {
+        url: "",
+        anonKey: ""
+      };
+    </script>
+    <script src="supabaseClient.js"></script>
     <script src="game.js"></script>
   </body>
 </html>

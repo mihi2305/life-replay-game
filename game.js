@@ -9,7 +9,16 @@ const cardCatalog = [
   "初めての給料日", "名刺のない挑戦", "新歓の輪", "知らない街の朝", "失敗した企画書", "旅先のメモ",
   "現地の友人", "小さなリリース", "友人との旅程", "一人旅の切符", "気になる子と同じ班", "文化祭の照明",
   "告白前の廊下", "価値観のすれ違い", "小学校のアルバム", "中学校のアルバム", "高校のアルバム", "大学のアルバム"
-];
+].map((name, index) => ({
+  id: cardIdFromName(name),
+  name,
+  category: inferCardCategory(name),
+  rarity: inferCardRarity(name),
+  description: "まだ見ぬ人生のかけらです。",
+  unlockHint: inferUnlockHint(name),
+  unlockConditionHidden: inferCardRarity(name) === "legendary",
+  sortOrder: index + 1
+}));
 
 const timeline = [
   ["小学校", "小1 4月", "入学式"], ["小学校", "小1 夏", "初めての友達イベント"], ["小学校", "小2 春", "習い事選択イベント"],
@@ -81,6 +90,10 @@ function initialState() {
     playerName: "あなた",
     childhoodType: null,
     relationship: { crush: false, partner: false, affection: 0, partnerStage: null },
+    startedAt: new Date().toISOString(),
+    choicesLog: [],
+    savedRun: null,
+    saveStatus: "",
     lesson: null,
     lessonStatus: "none",
     currentUniversityRoute: null,
@@ -111,6 +124,69 @@ function initialState() {
 
 const $ = (id) => document.getElementById(id);
 
+function ensureStorageLayer() {
+  if (window.LifeReplayStorage) return window.LifeReplayStorage;
+  const playerKey = "lifeReplay.anonymousPlayerId";
+  const runsKey = "lifeReplay.playRuns";
+  const cardsKey = "lifeReplay.collectedCards";
+  const progressKey = "lifeReplay.currentProgress";
+  const read = (key, fallback) => {
+    try {
+      return JSON.parse(window.localStorage.getItem(key) || JSON.stringify(fallback));
+    } catch (_) {
+      return fallback;
+    }
+  };
+  const write = (key, value) => window.localStorage.setItem(key, JSON.stringify(value));
+  window.LifeReplayStorage = {
+    isSupabaseConfigured: () => false,
+    getPlayerId: () => {
+      let id = window.localStorage.getItem(playerKey);
+      if (!id) {
+        id = crypto.randomUUID();
+        window.localStorage.setItem(playerKey, id);
+      }
+      return id;
+    },
+    upsertPlayer: async () => ({ source: "local" }),
+    syncCardCatalog: async () => ({ source: "local" }),
+    savePlayRun: async (run) => {
+      const playerId = window.LifeReplayStorage.getPlayerId();
+      const runs = read(runsKey, []);
+      const saved = { ...run, id: crypto.randomUUID(), player_id: playerId, run_number: runs.filter((item) => item.player_id === playerId).length + 1, saved_locally: true };
+      runs.push(saved);
+      write(runsKey, runs);
+      return { source: "local", run: saved };
+    },
+    listPlayRuns: async () => {
+      const playerId = window.LifeReplayStorage.getPlayerId();
+      return read(runsKey, []).filter((run) => run.player_id === playerId).sort((a, b) => String(b.finished_at).localeCompare(String(a.finished_at)));
+    },
+    upsertCollectedCard: async (card) => {
+      const cards = read(cardsKey, {});
+      const current = cards[card.id];
+      cards[card.id] = current ? { ...current, collectCount: current.collectCount + 1 } : { ...card, firstCollectedAt: new Date().toISOString(), collectCount: 1 };
+      write(cardsKey, cards);
+      return { source: "local" };
+    },
+    listCollectedCards: async () => read(cardsKey, {}),
+    saveCurrentProgress: (progress) => {
+      const playerId = window.LifeReplayStorage.getPlayerId();
+      write(`${progressKey}.${playerId}`, { ...progress, updatedAt: new Date().toISOString() });
+      return { source: "local" };
+    },
+    getCurrentProgress: () => {
+      const playerId = window.LifeReplayStorage.getPlayerId();
+      return read(`${progressKey}.${playerId}`, null);
+    },
+    clearCurrentProgress: () => {
+      const playerId = window.LifeReplayStorage.getPlayerId();
+      window.localStorage.removeItem(`${progressKey}.${playerId}`);
+    }
+  };
+  return window.LifeReplayStorage;
+}
+
 function rank(value) {
   if (value >= 95) return "S";
   if (value >= 85) return "A";
@@ -128,6 +204,34 @@ function clamp(value, min = 0, max = 100) {
 
 function shuffle(items) {
   return [...items].sort(() => Math.random() - 0.5);
+}
+
+function cardIdFromName(name) {
+  return `card_${btoa(unescape(encodeURIComponent(name))).replace(/=+$/g, "").replace(/[^a-zA-Z0-9]/g, "_").toLowerCase()}`;
+}
+
+function inferCardCategory(name) {
+  if (name.includes("アルバム")) return "ステージ";
+  if (name.includes("受験") || name.includes("参考書") || name.includes("鉛筆") || name.includes("図鑑")) return "勉強";
+  if (name.includes("友") || name.includes("班") || name.includes("文化祭") || name.includes("告白") || name.includes("価値観")) return "人間関係";
+  if (name.includes("給料") || name.includes("名刺") || name.includes("リリース")) return "仕事";
+  if (name.includes("サッカー") || name.includes("ピアノ") || name.includes("英会話") || name.includes("プログラミング") || name.includes("習い事")) return "習い事";
+  if (name.includes("留学") || name.includes("街") || name.includes("旅")) return "探索";
+  return "記憶";
+}
+
+function inferCardRarity(name) {
+  if (name.includes("不合格") || name.includes("開かれた") || name.includes("失敗した企画書") || name.includes("知らない街")) return "epic";
+  if (name.includes("告白") || name.includes("価値観") || name.includes("アルバム") || name.includes("給料") || name.includes("入部届")) return "rare";
+  return "common";
+}
+
+function inferUnlockHint(name) {
+  const rarity = inferCardRarity(name);
+  if (rarity === "legendary") return "入手条件: ？？？";
+  if (rarity === "epic") return "一度つまずいた先に、特別な景色があるかもしれません。";
+  if (rarity === "rare") return "誰かとの距離や、大きな選択が少し動いたときに出会いやすいです。";
+  return "毎月の何気ない選択から生まれる思い出です。";
 }
 
 function log(text) {
@@ -308,13 +412,35 @@ function improveMoodItem() {
 
 function addCard(name, category, rarity, description) {
   const current = timeline[state.turnIndex];
-  const card = { name, category, rarity, description, date: current.date };
+  const catalog = findCatalogCard(name);
+  const card = {
+    id: catalog?.id || cardIdFromName(name),
+    name,
+    category: category || catalog?.category || "記憶",
+    rarity: normalizeRarity(rarity || catalog?.rarity || "common"),
+    description: description || catalog?.description || "",
+    unlockHint: catalog?.unlockHint || inferUnlockHint(name),
+    date: current.date
+  };
   state.cards.push(card);
   log(`カード獲得：${name}`);
+  ensureStorageLayer().upsertCollectedCard(card).catch((error) => console.warn(error));
   if (state.effectBuffer) {
     state.effectBuffer.cards.push(card);
-    state.effectBuffer.notices.push({ text: `アルバムが開放された！「${name}」`, level: rarity === "Epic" || rarity === "Legendary" ? "special" : "normal" });
+    state.effectBuffer.notices.push({ text: `アルバムが開放された！「${name}」`, level: card.rarity === "epic" || card.rarity === "legendary" ? "special" : "normal" });
   }
+}
+
+function normalizeRarity(rarity) {
+  return String(rarity || "common").toLowerCase();
+}
+
+function displayRarity(rarity) {
+  return ({ common: "Common", rare: "Rare", epic: "Epic", legendary: "Legendary", unknown: "Unknown" }[normalizeRarity(rarity)] || rarity);
+}
+
+function findCatalogCard(nameOrId) {
+  return cardCatalog.find((card) => card.name === nameOrId || card.id === nameOrId);
 }
 
 function currentInfo() {
@@ -331,6 +457,35 @@ function render() {
   $("logList").innerHTML = state.logs.map((item) => `<div class="log-item">${escapeHtml(item)}</div>`).join("");
   $("latestCards").innerHTML = state.cards.slice(-4).map(cardHtml).join("") || `<div class="log-item">まだカードはありません。</div>`;
   renderMain();
+  persistCurrentProgress();
+}
+
+function persistCurrentProgress() {
+  if (!state || state.mode === "start" || state.mode === "result") return;
+  try {
+    ensureStorageLayer().saveCurrentProgress({
+      turnIndex: state.turnIndex,
+      playerName: state.playerName,
+      childhoodType: state.childhoodType,
+      stage: currentInfo().stage,
+      date: currentInfo().date,
+      stats: {
+        academic: state.academic,
+        skill: state.skill,
+        social: state.social,
+        energy: state.energy,
+        mood: state.mood,
+        money: state.money
+      },
+      relationship: state.relationship,
+      routes: state.routes,
+      cards: state.cards.map((card) => ({ id: card.id, name: card.name, rarity: card.rarity, category: card.category })),
+      choicesLog: state.choicesLog,
+      startedAt: state.startedAt
+    });
+  } catch (error) {
+    console.warn(error);
+  }
 }
 
 function displayChapterTitle(info) {
@@ -395,6 +550,7 @@ function renderStart() {
   $("startGameButton").addEventListener("click", () => {
     const input = $("playerNameInput").value.trim();
     state.playerName = input || "あなた";
+    ensureStorageLayer().upsertPlayer(state.playerName).catch((error) => console.warn(error));
     state.pendingEvent = childhoodEvent();
     state.mode = "event";
     render();
@@ -546,7 +702,24 @@ function doAction(key) {
   log(`${action.label}を選んだ。`);
   tickBoosts();
   maybeMilestoneCard(key);
-  showOutcome(actionResultText(key), finishEffectCapture(), afterMainAction);
+  const effects = finishEffectCapture();
+  recordChoiceEntry({ label: action.label, actionKey: key, choiceText: actionResultText(key), effects });
+  showOutcome(actionResultText(key), effects, afterMainAction);
+}
+
+function recordChoiceEntry({ label, actionKey = "", choiceText = "", effects = {} }) {
+  state.choicesLog.push({
+    turnIndex: state.turnIndex,
+    turn: state.turnIndex + 1,
+    stage: currentInfo().stage,
+    date: currentInfo().date,
+    label,
+    actionKey,
+    choiceText,
+    statDelta: (effects.changes || []).map((change) => ({ key: change.key, amount: change.amount, text: change.text })),
+    cardsUnlocked: (effects.cards || []).map((card) => ({ id: card.id, name: card.name, rarity: card.rarity })),
+    timestamp: new Date().toISOString()
+  });
 }
 
 function recordAction(key) {
@@ -1204,6 +1377,7 @@ function resolveEvent(choiceItem) {
   const effects = finishEffectCapture();
   if (result === false) return render();
   log(`選択：${choiceItem.label}`);
+  recordChoiceEntry({ label: choiceItem.label, actionKey: "event", choiceText: choiceItem.text || choiceItem.label, effects });
   state.pendingEvent = null;
   if (choiceItem.noTurnAdvance) {
     showOutcome(choiceItem.text || `${choiceItem.label}を選んだ。`, effects, () => {
@@ -1246,6 +1420,7 @@ function renderExamReveal() {
           startEffectCapture();
           reveal.apply();
           reveal.effects = finishEffectCapture();
+          recordChoiceEntry({ label: reveal.success ? "結果を見る：合格" : "結果を見る：届かなかった", actionKey: "exam_result", choiceText: reveal.success ? reveal.successText : reveal.failureText, effects: reveal.effects });
           render();
         }
       }, 900);
@@ -1347,7 +1522,7 @@ function buyItem(index) {
 function showAlbum() {
   const collection = collectionStats();
   const acquired = new Set(state.cards.map((card) => card.name));
-  const unknownCards = cardCatalog.filter((name) => !acquired.has(name)).map((name) => ({ name: "？？？", category: "未獲得", rarity: "Unknown", description: "まだ出会っていない思い出です。", date: "-" }));
+  const unknownCards = cardCatalog.filter((card) => !acquired.has(card.name)).map((card) => ({ name: "？？？", category: "未獲得", rarity: "unknown", description: card.unlockHint, date: "-" }));
   $("modalTitle").textContent = "人生アルバム";
   $("modalBody").innerHTML = state.cards.length
     ? `<p>収集率：${collection.acquired} / ${collection.total}（${collection.rate}%）</p><div class="card-grid">${state.cards.map(cardHtml).join("")}${unknownCards.map(cardHtml).join("")}</div>`
@@ -1355,24 +1530,64 @@ function showAlbum() {
   showModal();
 }
 
-function collectionStats() {
-  const uniqueAcquired = new Set(state.cards.map((card) => card.name));
-  const total = Math.max(cardCatalog.length, uniqueAcquired.size);
-  return { acquired: uniqueAcquired.size, total, rate: Math.round((uniqueAcquired.size / total) * 100) };
+function collectionStats(collectedMap) {
+  const acquiredIds = new Set([
+    ...state.cards.map((card) => card.id || cardIdFromName(card.name)),
+    ...Object.keys(collectedMap || {})
+  ]);
+  const total = Math.max(cardCatalog.length, acquiredIds.size);
+  return { acquired: acquiredIds.size, total, rate: Math.round((acquiredIds.size / total) * 100) };
+}
+
+async function showCardCatalog(filters = {}) {
+  const collected = await ensureStorageLayer().listCollectedCards();
+  const collection = collectionStats(collected);
+  const categories = ["all", ...new Set(cardCatalog.map((card) => card.category))];
+  const rarities = ["all", "common", "rare", "epic", "legendary"];
+  const category = filters.category || "all";
+  const rarity = filters.rarity || "all";
+  const filtered = cardCatalog.filter((card) => (category === "all" || card.category === category) && (rarity === "all" || card.rarity === rarity));
+  const rarityCounts = rarities.filter((item) => item !== "all").map((item) => `${displayRarity(item)} ${cardCatalog.filter((card) => card.rarity === item && collected[card.id]).length}`).join(" / ");
+
+  $("modalTitle").textContent = "カード図鑑";
+  $("modalBody").innerHTML = `
+    <p>何度も選び直すことで、少しずつ人生の図鑑が埋まっていきます。</p>
+    <p>収集率：${collection.acquired} / ${collection.total}（${collection.rate}%）</p>
+    <p>${escapeHtml(rarityCounts)}</p>
+    <div class="filter-row">
+      <label>カテゴリ <select id="catalogCategory">${categories.map((item) => `<option value="${escapeHtml(item)}" ${item === category ? "selected" : ""}>${escapeHtml(item === "all" ? "すべて" : item)}</option>`).join("")}</select></label>
+      <label>レア度 <select id="catalogRarity">${rarities.map((item) => `<option value="${escapeHtml(item)}" ${item === rarity ? "selected" : ""}>${escapeHtml(item === "all" ? "すべて" : displayRarity(item))}</option>`).join("")}</select></label>
+    </div>
+    <div class="card-grid">${filtered.map((card) => catalogCardHtml(card, collected[card.id])).join("")}</div>
+  `;
+  showModal();
+  $("catalogCategory").addEventListener("change", () => showCardCatalog({ category: $("catalogCategory").value, rarity: $("catalogRarity").value }));
+  $("catalogRarity").addEventListener("change", () => showCardCatalog({ category: $("catalogCategory").value, rarity: $("catalogRarity").value }));
+}
+
+function catalogCardHtml(card, collected) {
+  if (collected) {
+    return `<div class="card catalog-card"><strong>${escapeHtml(card.name)}</strong><span>${escapeHtml(displayRarity(card.rarity))} / ${escapeHtml(card.category)}</span><p>${escapeHtml(card.description)}</p><p>初獲得：${escapeHtml(collected.firstCollectedAt || "-")} / 獲得回数：${collected.collectCount || 1}</p></div>`;
+  }
+  const hideName = card.rarity === "epic" || card.rarity === "legendary" || card.unlockConditionHidden;
+  const hint = card.rarity === "legendary" ? "入手条件: ？？？" : card.unlockHint;
+  return `<div class="card catalog-card locked-card"><strong>${hideName ? "？？？" : "？？？"}</strong><span>${escapeHtml(displayRarity(card.rarity))} / 未獲得</span><p>${escapeHtml(hint)}</p></div>`;
 }
 
 function cardHtml(card) {
-  return `<div class="card"><strong>${escapeHtml(card.name)}</strong><span>${escapeHtml(card.rarity)} / ${escapeHtml(card.category)} / ${escapeHtml(card.date)}</span><p>${escapeHtml(card.description)}</p></div>`;
+  return `<div class="card"><strong>${escapeHtml(card.name)}</strong><span>${escapeHtml(displayRarity(card.rarity))} / ${escapeHtml(card.category)} / ${escapeHtml(card.date || "-")}</span><p>${escapeHtml(card.description)}</p></div>`;
 }
 
 function renderResult() {
   const result = decideType();
   const analysis = buildFinalAnalysis(result);
   const collection = collectionStats();
+  if (!state.savedRun) saveCurrentRun(result);
   $("message").innerHTML = `<div class="result-title">${state.playerName}は、${result.name}</div>${result.desc}`;
   $("choices").innerHTML = `
     <div class="final-analysis">
       <h2>人生リプレイ分析</h2>
+      <p>${escapeHtml(state.saveStatus || "この人生を記録しています…")}</p>
       <p>カード収集率：${collection.acquired} / ${collection.total}（${collection.rate}%）</p>
       <p>${escapeHtml(analysis.overview)}</p>
       <h3>よく選んだ行動</h3>
@@ -1385,13 +1600,53 @@ function renderResult() {
       <ul>${analysis.cautions.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>
       <p><strong>これから大切にするとよさそうなこと：</strong>${escapeHtml(analysis.advice)}</p>
     </div>
-    <button class="choice-button" type="button" id="resultAlbum">人生アルバムを見る<small>${collection.acquired}枚 / ${collection.rate}%</small></button>
-    <button class="choice-button" type="button" id="playAgain">もう一度プレイする<small>別の選択でリプレイ</small></button>
+    <button class="choice-button" type="button" id="playAgain">もう一度、別の人生を歩む<small>図鑑は残したまま新しい周回へ</small></button>
+    <button class="choice-button" type="button" id="historyResultButton">過去の人生を見る<small>記録された人生を振り返る</small></button>
+    <button class="choice-button" type="button" id="catalogResultButton">カード図鑑を見る<small>${collection.acquired}枚 / ${collection.rate}%</small></button>
+    <button class="choice-button" type="button" id="resultAlbum">今回の人生アルバム<small>${state.cards.length}枚の思い出</small></button>
   `;
   $("chanceBox").classList.remove("hidden");
   $("chanceBox").innerHTML = `最終ステータス：学力${rank(state.academic)}(${state.academic}) / スキル${rank(state.skill)}(${state.skill}) / 社交性${rank(state.social)}(${state.social}) / 満足度 ${moodLevels[state.mood]} / ${state.money.toLocaleString()}G`;
   $("resultAlbum").addEventListener("click", showFinalModal);
+  $("historyResultButton").addEventListener("click", showPlayHistory);
+  $("catalogResultButton").addEventListener("click", () => showCardCatalog());
   $("playAgain").addEventListener("click", resetGame);
+}
+
+async function saveCurrentRun(result) {
+  if (state.savedRun === "saving") return;
+  state.savedRun = "saving";
+  const finalStats = {
+    academic: state.academic,
+    skill: state.skill,
+    social: state.social,
+    energy: state.energy,
+    mood: moodLevels[state.mood],
+    money: state.money
+  };
+  const payload = {
+    display_name: state.playerName,
+    final_type: result.name,
+    ending_title: `${state.playerName}は、${result.name}`,
+    final_stats: finalStats,
+    choices_log: state.choicesLog,
+    routes: state.routes,
+    cards_earned: state.cards.map((card) => ({ id: card.id, name: card.name, rarity: card.rarity, category: card.category })),
+    started_at: state.startedAt,
+    finished_at: new Date().toISOString()
+  };
+  try {
+    const storage = ensureStorageLayer();
+    const saved = await storage.savePlayRun(payload);
+    state.savedRun = saved.run;
+    storage.clearCurrentProgress?.();
+    state.saveStatus = saved.source === "supabase" ? "この人生をクラウドに記録しました。" : "この人生をこの端末に記録しました。クラウド保存は未接続です。";
+  } catch (error) {
+    console.warn(error);
+    state.savedRun = "failed";
+    state.saveStatus = "記録に失敗しました。でも、この人生の結果はここに残っています。";
+  }
+  if (state.mode === "result") render();
 }
 
 function buildFinalAnalysis(result) {
@@ -1532,6 +1787,66 @@ function showFinalModal() {
   showModal();
 }
 
+async function showPlayHistory() {
+  $("modalTitle").textContent = "過去の人生";
+  $("modalBody").innerHTML = `<p>記録された人生を読み込んでいます…</p>`;
+  showModal();
+  const runs = await ensureStorageLayer().listPlayRuns();
+  if (!runs.length) {
+    $("modalBody").innerHTML = `<p>まだ記録された人生はありません。</p><p>一度エンディングまで進むと、ここに人生の記録が残ります。</p>`;
+    return;
+  }
+  $("modalBody").innerHTML = `
+    <p>何度も選び直すことで、少しずつ人生の図鑑が埋まっていきます。</p>
+    <div class="history-list">
+      ${runs.map((run, index) => historyItemHtml(run, index)).join("")}
+    </div>
+  `;
+  document.querySelectorAll("[data-run-index]").forEach((button) => {
+    button.addEventListener("click", () => showRunDetail(runs[Number(button.dataset.runIndex)]));
+  });
+}
+
+function historyItemHtml(run, index) {
+  const stats = run.final_stats || {};
+  const cards = run.cards_earned || [];
+  return `<div class="history-item">
+    <strong>${run.run_number || index + 1}周目：${escapeHtml(run.final_type || "記録された人生")}</strong>
+    <span>${escapeHtml(formatDate(run.finished_at))}</span>
+    <p>${escapeHtml(run.ending_title || "")}</p>
+    <p>学力 ${stats.academic ?? "-"} / スキル ${stats.skill ?? "-"} / 社交性 ${stats.social ?? "-"} / カード ${cards.length}枚</p>
+    <button class="secondary-button" type="button" data-run-index="${index}">詳細を見る</button>
+  </div>`;
+}
+
+function showRunDetail(run) {
+  const choices = (run.choices_log || []).slice(-12);
+  const cards = run.cards_earned || [];
+  $("modalTitle").textContent = run.ending_title || "人生の記録";
+  $("modalBody").innerHTML = `
+    <p>${escapeHtml(formatDate(run.finished_at))}</p>
+    <h3>最終結果</h3>
+    <p>${escapeHtml(run.final_type || "-")}</p>
+    <h3>通ったルート</h3>
+    <ul>${(run.routes || []).map((route) => `<li>${escapeHtml(route)}</li>`).join("") || "<li>記録なし</li>"}</ul>
+    <h3>主な選択</h3>
+    <ul>${choices.map((choiceItem) => `<li>${escapeHtml(choiceItem.date || "")} ${escapeHtml(choiceItem.label || "")}</li>`).join("") || "<li>記録なし</li>"}</ul>
+    <h3>獲得カード</h3>
+    <div class="card-grid">${cards.map((card) => cardHtml({ ...card, date: "-", description: findCatalogCard(card.id)?.description || "" })).join("") || "<p>カードなし</p>"}</div>
+    <button class="secondary-button" type="button" id="backToHistory">一覧に戻る</button>
+  `;
+  $("backToHistory").addEventListener("click", showPlayHistory);
+}
+
+function formatDate(value) {
+  if (!value) return "-";
+  try {
+    return new Intl.DateTimeFormat("ja-JP", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
+  } catch (_) {
+    return String(value);
+  }
+}
+
 function showModal() {
   $("modalBackdrop").classList.remove("hidden");
 }
@@ -1549,12 +1864,23 @@ function resetGame() {
   render();
 }
 
+function bootstrapPersistence() {
+  try {
+    ensureStorageLayer().syncCardCatalog?.(cardCatalog);
+  } catch (error) {
+    console.warn(error);
+  }
+}
+
 $("shopButton").addEventListener("click", openShop);
 $("albumButton").addEventListener("click", showAlbum);
+$("historyButton").addEventListener("click", showPlayHistory);
+$("catalogButton").addEventListener("click", () => showCardCatalog());
 $("resetButton").addEventListener("click", resetGame);
 $("closeModal").addEventListener("click", closeModal);
 $("modalBackdrop").addEventListener("click", (event) => {
   if (event.target === $("modalBackdrop")) closeModal();
 });
 
+bootstrapPersistence();
 resetGame();
