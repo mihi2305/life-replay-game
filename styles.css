@@ -679,6 +679,32 @@ h1 {
   margin-bottom: 8px;
 }
 
+.final-analysis {
+  grid-column: 1 / -1;
+  padding: 16px;
+  border-radius: 8px;
+  background: #fff;
+  border: 1px solid var(--line);
+  line-height: 1.7;
+}
+
+.final-analysis h2,
+.final-analysis h3 {
+  margin: 0 0 8px;
+}
+
+.final-analysis h3 {
+  margin-top: 14px;
+  color: var(--blue);
+  font-size: 17px;
+}
+
+.final-analysis ul,
+.final-analysis ol {
+  margin: 0;
+  padding-left: 22px;
+}
+
 .route-list {
   display: flex;
   flex-wrap: wrap;
