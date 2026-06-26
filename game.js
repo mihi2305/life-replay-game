@@ -1,6 +1,15 @@
 const moodLevels = ["悪い", "ちょい悪", "普通", "調子いい", "幸せ"];
 const hiddenKeys = ["安定志向", "挑戦志向", "協調志向", "自立志向", "計画志向", "直感志向", "探索志向", "達成志向"];
 const statLabels = { academic: "学力", skill: "スキル", social: "社交性", energy: "体力", mood: "満足度", money: "お金" };
+const cardCatalog = [
+  "幼い日のかけっこ", "小さな図鑑", "砂場の友達", "はじめての作品", "なんでも試した日",
+  "はじめてのサッカー", "はじめてのピアノ", "はじめての英会話", "はじめてのプログラミング", "空き地の午後",
+  "夜の参考書", "開かれたドア", "不合格通知", "何気ない帰り道", "続ける理由", "放課後の入部届",
+  "探し直す春", "初めての敗北", "放課後の秘密基地", "鉛筆の跡", "続けた手のひら", "最後の円陣",
+  "初めての給料日", "名刺のない挑戦", "新歓の輪", "知らない街の朝", "失敗した企画書", "旅先のメモ",
+  "現地の友人", "小さなリリース", "友人との旅程", "一人旅の切符", "気になる子と同じ班", "文化祭の照明",
+  "告白前の廊下", "価値観のすれ違い", "小学校のアルバム", "中学校のアルバム", "高校のアルバム", "大学のアルバム"
+];
 
 const timeline = [
   ["小学校", "小1 4月", "入学式"], ["小学校", "小1 夏", "初めての友達イベント"], ["小学校", "小2 春", "習い事選択イベント"],
@@ -69,6 +78,9 @@ function initialState() {
     energy: 82,
     mood: 2,
     money: 3500,
+    playerName: "あなた",
+    childhoodType: null,
+    relationship: { crush: false, partner: false, affection: 0, partnerStage: null },
     lesson: null,
     lessonStatus: "none",
     currentUniversityRoute: null,
@@ -86,7 +98,7 @@ function initialState() {
     boosts: [],
     cards: [],
     logs: ["小さなランドセルで、人生リプレイが始まった。"],
-    mode: "action",
+    mode: "start",
     pendingEvent: null,
     pendingOutcome: null,
     pendingExamReveal: null,
@@ -263,7 +275,8 @@ function energyMod() {
 }
 
 function moodMod() {
-  return [-2, -1, 0, 1, 2][state.mood];
+  const partnerBonus = state.relationship?.partner ? 1 : 0;
+  return [-2, -1, 0, 1, 2][state.mood] + partnerBonus;
 }
 
 function boostFor(actionKey, action) {
@@ -298,7 +311,10 @@ function addCard(name, category, rarity, description) {
   const card = { name, category, rarity, description, date: current.date };
   state.cards.push(card);
   log(`カード獲得：${name}`);
-  if (state.effectBuffer) state.effectBuffer.cards.push(card);
+  if (state.effectBuffer) {
+    state.effectBuffer.cards.push(card);
+    state.effectBuffer.notices.push({ text: `アルバムが開放された！「${name}」`, level: rarity === "Epic" || rarity === "Legendary" ? "special" : "normal" });
+  }
 }
 
 function currentInfo() {
@@ -344,6 +360,7 @@ function statHtml() {
 function renderMain() {
   $("chanceBox").classList.add("hidden");
   const info = currentInfo();
+  if (state.mode === "start") return renderStart();
   if (state.mode === "outcome") return renderOutcome();
   if (state.mode === "examReveal") return renderExamReveal();
   if (state.mode === "event") return renderEvent();
@@ -359,6 +376,42 @@ function renderMain() {
     button.addEventListener("click", () => doAction(button.dataset.action));
   });
   renderChance();
+}
+
+function renderStart() {
+  $("stageName").textContent = "はじまり";
+  $("turnLabel").textContent = "0 / 45";
+  $("yearLabel").textContent = "幼稚園";
+  $("chapterTitle").textContent = "名前を入力";
+  $("message").textContent = "これから、もう一度人生をリプレイします。\n呼ばれたい名前を入れてください。未入力でも、そのまま始められます。";
+  $("stats").innerHTML = statHtml();
+  $("choices").innerHTML = `
+    <div class="start-panel">
+      <label for="playerNameInput">名前</label>
+      <input id="playerNameInput" class="name-input" type="text" maxlength="12" placeholder="あなた" autocomplete="off" />
+      <button class="primary-button next-button" id="startGameButton" type="button">はじめる</button>
+    </div>
+  `;
+  $("startGameButton").addEventListener("click", () => {
+    const input = $("playerNameInput").value.trim();
+    state.playerName = input || "あなた";
+    state.pendingEvent = childhoodEvent();
+    state.mode = "event";
+    render();
+  });
+}
+
+function childhoodEvent() {
+  return {
+    title: `${state.playerName}は、幼稚園のころ、どんな時間が好きだった？`,
+    choices: [
+      { label: "外で走り回るのが好きだった", text: "園庭を走る足音が、今でも少し体に残っている。", noTurnAdvance: true, apply: () => { state.childhoodType = "active"; changeStats({ energy: 10, skill: 3, cap: 6 }); addHidden({ 挑戦志向: 2 }); addCard("幼い日のかけっこ", "幼少期", "Common", "外の空気と走る楽しさが、最初の記憶になった。"); } },
+      { label: "絵本や図鑑を見るのが好きだった", text: "ページをめくるたびに、知らない世界が少し近くなった。", noTurnAdvance: true, apply: () => { state.childhoodType = "book"; changeStats({ academic: 4, cap: 6 }); addHidden({ 探索志向: 2, 計画志向: 1 }); addCard("小さな図鑑", "幼少期", "Common", "知らないものを眺める時間が、好奇心の入口になった。"); } },
+      { label: "友達と遊ぶのが好きだった", text: "誰かと笑う時間が、毎日の楽しみだった。", noTurnAdvance: true, apply: () => { state.childhoodType = "friend"; changeStats({ social: 4, cap: 6 }); addHidden({ 協調志向: 2 }); addCard("砂場の友達", "幼少期", "Common", "一緒に作った山や道が、人との時間の始まりだった。"); } },
+      { label: "一人で工作やお絵描きをするのが好きだった", text: "静かな時間の中で、自分だけの形を作っていた。", noTurnAdvance: true, apply: () => { state.childhoodType = "craft"; changeStats({ skill: 4, cap: 6 }); addHidden({ 自立志向: 2, 直感志向: 1 }); addCard("はじめての作品", "幼少期", "Common", "小さな手で作ったものが、自分だけの世界を広げてくれた。"); } },
+      { label: "いろいろ試してみるのが好きだった", text: "飽きっぽいというより、いろんな扉を開けてみたかった。", noTurnAdvance: true, apply: () => { state.childhoodType = "curious"; changeStats({ mood: Math.min(4, state.mood + 1) }); addHidden({ 探索志向: 3 }); addCard("なんでも試した日", "幼少期", "Common", "あれもこれも触ってみることが、最初の選び方だった。"); } }
+    ]
+  };
 }
 
 function renderOutcome() {
@@ -377,7 +430,7 @@ function renderOutcome() {
       </div>
       ${rankUps.length ? `<div class="rankup-box">${rankUps.map(rankUpHtml).join("")}</div>` : ""}
       ${notices.length ? `<div class="notice-box">${notices.map((notice) => `<p>${escapeHtml(notice.text)}</p>`).join("")}</div>` : ""}
-      ${cards.length ? `<div class="card-gain-box"><strong>カード獲得！</strong>${cards.map((card) => `<p>${escapeHtml(card.name)} <span>${escapeHtml(card.rarity)}</span></p>`).join("")}</div>` : ""}
+      ${cards.length ? `<div class="card-gain-box"><strong>アルバムが開放された！</strong>${cards.map((card) => `<p>${escapeHtml(card.name)} <span>${escapeHtml(card.rarity)}</span></p>`).join("")}</div>` : ""}
       <button class="primary-button next-button" id="nextOutcome" type="button">次へ</button>
     </div>
   `;
@@ -418,12 +471,30 @@ function monthPrompt(info) {
 
 function availableActions() {
   const stage = currentInfo().stage;
-  const keys = [...state.unlocked].filter((key) => key !== "lesson" || (stage === "小学校" || stage === "中学校"));
+  const keys = [...state.unlocked].filter((key) => {
+    if (key === "lesson") return stage === "小学校" || stage === "中学校";
+    if (key === "exam") return shouldShowExamAction();
+    return true;
+  });
   if (state.turnIndex >= 13) keys.push("club");
+  if (shouldShowExamAction()) keys.push("exam");
   if (stage === "高校" || stage === "大学" || stage === "社会に出る前") keys.push(...maturedLessonActions());
-  if (state.turnIndex >= 24 && state.social >= 35) keys.push("romance");
+  if (shouldShowRomanceAction()) keys.push("romance");
   if (state.turnIndex >= 30) keys.push("work", ...universityActionKeys());
   return [...new Set(keys)].filter((key) => actions[key]).map((key) => [key, actions[key]]);
+}
+
+function shouldShowExamAction() {
+  const turn = state.turnIndex + 1;
+  if (currentInfo().stage === "小学校") return state.cramSchool && turn >= 9 && turn <= 12;
+  if (currentInfo().stage === "中学校") return turn >= 19 && turn <= 21;
+  if (currentInfo().stage === "高校") return turn >= 28 && turn <= 30;
+  return false;
+}
+
+function shouldShowRomanceAction() {
+  if (state.relationship.partner) return state.turnIndex >= 24;
+  return currentInfo().stage === "高校" && state.turnIndex >= 26 && state.relationship.affection >= 4 && state.social >= 40;
 }
 
 function maturedLessonActions() {
@@ -835,7 +906,7 @@ function examFailureText(label) {
 
 function universityActionEvent() {
   return {
-    title: "大学生活が始まった。自由な時間を何に使おう？",
+    title: `${state.playerName}の大学生活が始まった。自由な時間を何に使おう？`,
     choices: shuffle([
       { label: "サークルに入る", text: "人との出会いを増やす。", apply: () => { state.unlocked.add("romance"); changeStats({ social: 4, energy: -8 }); addHidden({ 協調志向: 2, 直感志向: 1 }); addCard("新歓の輪", "大学", "Common", "ぎこちない自己紹介から、大学の日々がほどけていった。"); } },
       { label: "バイトを始める", text: "お金を稼ぐ行動が増える。", apply: () => { state.unlocked.add("work"); changeStats({ money: 4000, energy: -10 }); addHidden({ 自立志向: 2, 安定志向: 1 }); addCard("初めての給料日", "仕事", "Rare", "自分で得たお金は、少し重くて嬉しかった。"); } },
@@ -926,9 +997,10 @@ function finalValueEvent() {
 
 function themedEvent() {
   if (currentInfo().stage === "大学" && state.currentUniversityRoute) {
-    return universityRouteDevelopmentEvent();
+    const routeEvent = Math.random() < 0.55 ? universityRouteDevelopmentEvent() : null;
+    if (routeEvent) return routeEvent;
   }
-  const pool = [
+  const pool = [...stageNaturalEvents(currentInfo().stage),
     { title: "友達から急に遊びに誘われた。", choices: [
       choice("行く", "笑いすぎて帰り道が少し明るい。", { social: 2, energy: -10, mood: 3 }, { 協調志向: 2, 直感志向: 1 }),
       choice("今日は断って勉強する", "少し寂しいけれど、机に向かった。", { academic: 2, mood: 2 }, { 計画志向: 2 }),
@@ -941,8 +1013,8 @@ function themedEvent() {
     ] },
     { title: "冬、親戚が集まる日。お年玉をもらった。", choices: [
       choice("将来のために貯める", "少し大人になった気がした。", { money: otoshidama(), mood: 3 }, { 安定志向: 2, 計画志向: 1 }),
-      choice("必要なものだけ買う", "ほしいものと必要なものを考えた。", { money: otoshidama() - 800, skill: 1, mood: 3 }, { 計画志向: 1, 自立志向: 1 }),
-      choice("友達と楽しむ", "思い出にも少し使った。", { money: otoshidama() - 1200, social: 2, mood: 4 }, { 協調志向: 2, 直感志向: 1 })
+      choice("必要なものだけ買う", "ほしいものと必要なものを考えた。", { money: Math.max(0, otoshidama() - stageMoneyCost()), skill: 1, mood: 3 }, { 計画志向: 1, 自立志向: 1 }),
+      choice("友達と楽しむ", "思い出にも少し使った。", { money: -stageMoneyCost(), social: 2, mood: 4 }, { 協調志向: 2, 直感志向: 1 })
     ] },
     { title: "いつもの帰り道で、少しだけ遠回りしたくなった。", choices: [
       choice("知らない道へ行く", "見慣れない景色に胸が弾んだ。", { skill: 1, social: 1, energy: -5, mood: 3 }, { 探索志向: 2, 挑戦志向: 1 }, "放課後の秘密基地"),
@@ -955,21 +1027,154 @@ function themedEvent() {
   return event;
 }
 
+function stageNaturalEvents(stage) {
+  const elementary = [
+    event("席替えで隣の子と仲良くなった。", [
+      choice("少し話しかける", "休み時間の短い会話が、次の日の楽しみになった。", { social: 2, cap: 5 }, { 協調志向: 1 }),
+      relationshipChoice("同じ係を頑張る", "気になる子と同じ班になって、少しだけ学校が楽しみになった。", 1, { social: 1, mood: 3, cap: 5 }, "気になる子と同じ班"),
+      choice("いつも通り過ごす", "大きく変わらない日も、ちゃんと一日だった。", { energy: 4, cap: 5 }, { 安定志向: 1 })
+    ]),
+    event("忘れ物をして、先生に注意された。", [
+      choice("次からメモする", "小さな失敗を、次の準備に変えた。", { academic: 1, mood: 2, cap: 5 }, { 計画志向: 2 }),
+      choice("友達に助けてもらう", "困ったときに頼れる人がいると知った。", { social: 1, mood: 3, cap: 5 }, { 協調志向: 1 }),
+      choice("今日は早めに寝る", "疲れていたことにも気づけた。", { energy: 12, mood: 2, cap: 5 }, { 安定志向: 1 })
+    ]),
+    event("運動会の練習が始まった。", [
+      choice("全力で走る", "息が上がるほど走って、体が少し軽くなった。", { skill: 2, energy: -8, cap: 5 }, { 挑戦志向: 1 }),
+      choice("応援を頑張る", "声を合わせる楽しさを知った。", { social: 2, cap: 5 }, { 協調志向: 1 }),
+      choice("無理せず参加する", "できる範囲で参加することも、大事な選択だった。", { energy: 5, mood: 2, cap: 5 }, { 安定志向: 1 })
+    ]),
+    event("友達とケンカしてしまった。", [
+      choice("自分から謝る", "言いにくい一言を出したら、胸が少し軽くなった。", { social: 2, mood: 3, cap: 5 }, { 協調志向: 2 }),
+      choice("少し距離を置く", "すぐに答えを出さない時間も必要だった。", { energy: 6, mood: 2, cap: 5 }, { 安定志向: 1 }),
+      choice("理由を考える", "何が嫌だったのかを、少し言葉にできた。", { academic: 1, cap: 5 }, { 計画志向: 1 })
+    ]),
+    event("家の手伝いをして、少しお小遣いをもらった。", [
+      choice("貯金する", "小さなお金だけど、自分で残すと決めた。", { money: 200, cap: 5 }, { 安定志向: 1 }),
+      choice("文房具を買う", "新しいノートを開くのが少し楽しみになった。", { money: -120, academic: 1, cap: 5 }, { 計画志向: 1 }),
+      choice("友達とお菓子を買う", "帰り道の小さな買い物が、思い出になった。", { money: -100, social: 1, mood: 3, cap: 5 }, { 協調志向: 1 })
+    ])
+  ];
+  const middle = [
+    event("部活の先輩に褒められた。", [
+      choice("もっと練習する", "期待されることが、少し力になった。", { skill: 2, energy: -8, cap: 5 }, { 達成志向: 2 }),
+      choice("素直に喜ぶ", "褒められた言葉が、帰り道まで残った。", { mood: 3, social: 1, cap: 5 }, { 協調志向: 1 }),
+      choice("自分の課題を聞く", "次に伸ばす場所が見えた。", { skill: 1, academic: 1, cap: 5 }, { 計画志向: 1 })
+    ]),
+    event("定期テストの結果が返ってきた。", [
+      choice("復習する", "焦りを、次の準備に変えた。", { academic: 2, energy: -6, cap: 5 }, { 計画志向: 2 }),
+      choice("友達と見せ合う", "笑いながらも、少し刺激を受けた。", { social: 1, academic: 1, cap: 5 }, { 協調志向: 1 }),
+      choice("参考書を買う", "少しだけ本気の道具を増やした。", { money: -400, academic: 2, cap: 5 }, { 達成志向: 1 })
+    ]),
+    event("友達グループで少し悩んだ。", [
+      choice("一人とじっくり話す", "全員に合わせなくても、話せる人がいると分かった。", { social: 2, cap: 5 }, { 協調志向: 1 }),
+      choice("別の居場所も探す", "ひとつの場所にこだわりすぎなくてもよかった。", { skill: 1, mood: 3, cap: 5 }, { 探索志向: 1 }),
+      choice("今日は早く帰る", "疲れた日は、家の静けさが助けになった。", { energy: 12, mood: 2, cap: 5 }, { 安定志向: 1 })
+    ]),
+    event("文化祭準備で役割を任された。", [
+      choice("責任を持って進める", "任されたことが、自分を少し大きくした。", { skill: 2, energy: -8, cap: 5 }, { 達成志向: 1, 計画志向: 1 }),
+      choice("みんなに声をかける", "一人で抱えない方が、うまく進むこともあった。", { social: 2, cap: 5 }, { 協調志向: 2 }),
+      relationshipChoice("気になる人と準備する", "準備の合間に少し話せて、放課後がいつもより短く感じた。", 2, { social: 1, mood: 3, cap: 5 }, "文化祭の照明")
+    ]),
+    event("帰り道、気になる人と少し話せた。", [
+      relationshipChoice("もう少し話す", "何気ない話なのに、家に帰ってからも思い出した。", 2, { social: 1, mood: 3, cap: 5 }),
+      choice("友達として普通に接する", "変に意識しすぎず、自然に話せた。", { social: 1, cap: 5 }, { 安定志向: 1 }),
+      choice("今日は早めに帰る", "浮ついた気持ちを、少し落ち着かせた。", { energy: 6, cap: 5 }, { 計画志向: 1 })
+    ])
+  ];
+  const high = [
+    event("模試の結果が返ってきた。", [
+      choice("苦手を洗い出す", "数字は少し重かったけれど、次にやることは見えた。", { academic: 2, energy: -8, cap: 5 }, { 計画志向: 2 }),
+      choice("先生に相談する", "一人で抱えなくていいと分かった。", { academic: 1, social: 1, cap: 5 }, { 協調志向: 1 }),
+      choice("今日は切り替える", "落ち込みすぎないことも、続けるために必要だった。", { mood: 3, energy: 6, cap: 5 }, { 安定志向: 1 })
+    ]),
+    event("文化祭で、誰かとの距離が少し縮まった。", [
+      relationshipChoice("一緒に回る", "人混みの中で、少しだけ特別な時間になった。", 2, { social: 2, energy: -6, mood: 3, cap: 5 }, "文化祭の照明"),
+      choice("友達みんなで楽しむ", "にぎやかな時間が、高校生活の一枚になった。", { social: 2, mood: 3, cap: 5 }, { 協調志向: 1 }),
+      choice("裏方を頑張る", "見えないところを支える楽しさを知った。", { skill: 2, energy: -8, cap: 5 }, { 達成志向: 1 })
+    ]),
+    event("部活最後の大会が近づいてきた。", [
+      choice("最後まで練習する", "疲れの奥に、続けてきた時間があった。", { skill: 2, energy: -12, cap: 5 }, { 達成志向: 2 }),
+      choice("仲間と話す", "勝ち負けだけじゃないものが、そこに残っていた。", { social: 2, mood: 3, cap: 5 }, { 協調志向: 1 }),
+      choice("体を休める", "無理をしないことも、最後まで行くための準備だった。", { energy: 15, cap: 5 }, { 安定志向: 1 })
+    ]),
+    event("進路面談で、現実的な話を聞いた。", [
+      choice("計画を立て直す", "夢と現実の間に、具体的な道を引いてみた。", { academic: 2, cap: 5 }, { 計画志向: 2 }),
+      choice("別の選択肢も聞く", "ひとつの道だけじゃないと知って、少し息がしやすくなった。", { skill: 1, academic: 1, cap: 5 }, { 探索志向: 1 }),
+      choice("家族と相談する", "自分だけで決めなくてもいいと思えた。", { social: 1, mood: 3, cap: 5 }, { 協調志向: 1 })
+    ]),
+    event("告白できそうなタイミングが来た。", [
+      relationshipChoice("気持ちを伝える", "うまく言えなかったけれど、ちゃんと自分の言葉で伝えた。", 4, { social: 2, energy: -8, mood: 4, cap: 5 }, "告白前の廊下", true),
+      relationshipChoice("もう少し距離を縮める", "急がずに、話す時間を少し増やすことにした。", 2, { social: 1, mood: 3, cap: 5 }),
+      choice("今は進路を優先する", "気持ちはあるけれど、今は別のことに向き合うと決めた。", { academic: 1, energy: 4, cap: 5 }, { 計画志向: 1 })
+    ], () => state.relationship.affection >= 3 || state.social >= 45)
+  ];
+  const university = [
+    event("サークルの誘いを受けた。", [
+      choice("顔を出してみる", "知らない人の輪に入るのは少し緊張したけれど、悪くなかった。", { social: 2, energy: -6, cap: 5 }, { 探索志向: 1, 協調志向: 1 }),
+      choice("予定を見て考える", "自由な時間ほど、使い方を考える必要があった。", { academic: 1, energy: 4, cap: 5 }, { 計画志向: 1 }),
+      choice("今回は断る", "行かない選択も、自分のペースを守るためだった。", { energy: 8, cap: 5 }, { 安定志向: 1 })
+    ]),
+    event("ゼミや授業で発表することになった。", [
+      choice("準備して発表する", "緊張したけれど、考えを人に渡す感覚が少し分かった。", { academic: 2, skill: 1, energy: -8, cap: 5 }, { 計画志向: 1, 達成志向: 1 }),
+      choice("友達と練習する", "誰かに聞いてもらうだけで、言葉が整っていった。", { social: 1, academic: 1, cap: 5 }, { 協調志向: 1 }),
+      choice("最低限で乗り切る", "完璧ではないけれど、終えたことで少し楽になった。", { energy: 5, mood: 2, cap: 5 }, { 安定志向: 1 })
+    ]),
+    event("バイト先で責任ある仕事を任された。", [
+      choice("引き受ける", "少し重い役割が、自分を大人に近づけた気がした。", { money: 2200, skill: 1, energy: -10, cap: 5 }, { 自立志向: 2 }),
+      choice("できる範囲を相談する", "無理なく続けるために、言葉にして調整した。", { social: 1, money: 1200, cap: 5 }, { 計画志向: 1 }),
+      choice("今回は断る", "今の体力を見て、続けるために断った。", { energy: 10, mood: 2, cap: 5 }, { 安定志向: 1 })
+    ]),
+    event("留学説明会のチラシを見つけた。", [
+      choice("説明だけ聞いてみる", "遠い場所の話が、少しだけ現実の言葉になった。", { academic: 1, skill: 1, cap: 5 }, { 探索志向: 2 }),
+      choice("費用を調べる", "夢にも予算があると知って、少し現実的になった。", { money: -300, academic: 1, cap: 5 }, { 計画志向: 1 }),
+      choice("今は見送る", "行かない選択にも、自分の理由があった。", { energy: 5, cap: 5 }, { 安定志向: 1 })
+    ]),
+    event("恋人との価値観の違いを感じた。", [
+      relationshipChoice("正直に話す", "少し怖かったけれど、話したことで分かることがあった。", 1, { social: 1, mood: 2, cap: 5 }, "価値観のすれ違い"),
+      choice("少し距離を置く", "近い関係だからこそ、一人の時間も必要だった。", { energy: 8, mood: Math.max(0, state.mood - 1), cap: 5 }, { 自立志向: 1 }),
+      choice("友達に相談する", "誰かに話すと、自分の気持ちも少し見えてきた。", { social: 1, cap: 5 }, { 協調志向: 1 })
+    ], () => state.relationship.partner)
+  ];
+  return (stage === "小学校" ? elementary : stage === "中学校" ? middle : stage === "高校" ? high : stage === "大学" ? university : []).filter((item) => !item.condition || item.condition());
+}
+
+function event(title, choices, condition) {
+  return { title, choices, condition };
+}
+
+function relationshipChoice(label, text, affection, delta, cardName, canBecomePartner = false) {
+  return choice(label, text, delta, { 直感志向: 1, 協調志向: 1 }, cardName, () => {
+    state.relationship.affection += affection;
+    if (state.relationship.affection >= 3) state.relationship.crush = true;
+    if (canBecomePartner && !state.relationship.partner && state.relationship.affection >= 6 && state.social >= 40) {
+      state.relationship.partner = true;
+      state.relationship.partnerStage = currentInfo().stage;
+      addNotice("恋人ができた。うれしさと少しの緊張が、毎日に混ざり始めた。", "special");
+    }
+  });
+}
+
 function randomNaturalEvent() {
   return themedEvent();
 }
 
-function choice(label, text, delta, hidden, cardName) {
-  return { label, text, apply: () => { changeStats(delta); addHidden(hidden); if (cardName && Math.random() < 0.55) addCard(cardName, "記憶", "Common", text); } };
+function choice(label, text, delta, hidden, cardName, extraApply) {
+  return { label, text, apply: () => { changeStats(delta); addHidden(hidden); if (extraApply) extraApply(); if (cardName && Math.random() < 0.55) addCard(cardName, "記憶", cardName.includes("告白") || cardName.includes("価値観") ? "Rare" : "Common", text); } };
 }
 
 function otoshidama() {
-  let amount = 3000;
-  if (state.academic >= 40) amount += 500;
-  if (state.skill >= 40) amount += 500;
-  if (state.social >= 40) amount += 500;
-  if ([state.academic, state.skill, state.social].some((value) => value >= 70)) amount += 1000;
+  const stage = currentInfo().stage;
+  let amount = { 小学校: 200, 中学校: 350, 高校: 600, 大学: 1500 }[stage] || 500;
+  if (state.academic >= 40) amount += stage === "大学" ? 400 : 80;
+  if (state.skill >= 40) amount += stage === "大学" ? 400 : 80;
+  if (state.social >= 40) amount += stage === "大学" ? 400 : 80;
+  if ([state.academic, state.skill, state.social].some((value) => value >= 70)) amount += stage === "大学" ? 700 : 150;
   return amount;
+}
+
+function stageMoneyCost() {
+  return { 小学校: 120, 中学校: 350, 高校: 600, 大学: 1400 }[currentInfo().stage] || 300;
 }
 
 function renderEvent() {
@@ -1000,6 +1205,13 @@ function resolveEvent(choiceItem) {
   if (result === false) return render();
   log(`選択：${choiceItem.label}`);
   state.pendingEvent = null;
+  if (choiceItem.noTurnAdvance) {
+    showOutcome(choiceItem.text || `${choiceItem.label}を選んだ。`, effects, () => {
+      state.mode = "action";
+      render();
+    });
+    return;
+  }
   showOutcome(choiceItem.text || `${choiceItem.label}を選んだ。`, effects, () => {
     if (state.turnIndex === 44) {
       state.mode = "result";
@@ -1133,11 +1345,20 @@ function buyItem(index) {
 }
 
 function showAlbum() {
+  const collection = collectionStats();
+  const acquired = new Set(state.cards.map((card) => card.name));
+  const unknownCards = cardCatalog.filter((name) => !acquired.has(name)).map((name) => ({ name: "？？？", category: "未獲得", rarity: "Unknown", description: "まだ出会っていない思い出です。", date: "-" }));
   $("modalTitle").textContent = "人生アルバム";
   $("modalBody").innerHTML = state.cards.length
-    ? `<div class="card-grid">${state.cards.map(cardHtml).join("")}</div>`
+    ? `<p>収集率：${collection.acquired} / ${collection.total}（${collection.rate}%）</p><div class="card-grid">${state.cards.map(cardHtml).join("")}${unknownCards.map(cardHtml).join("")}</div>`
     : `<p>まだカードはありません。</p>`;
   showModal();
+}
+
+function collectionStats() {
+  const uniqueAcquired = new Set(state.cards.map((card) => card.name));
+  const total = Math.max(cardCatalog.length, uniqueAcquired.size);
+  return { acquired: uniqueAcquired.size, total, rate: Math.round((uniqueAcquired.size / total) * 100) };
 }
 
 function cardHtml(card) {
@@ -1147,10 +1368,12 @@ function cardHtml(card) {
 function renderResult() {
   const result = decideType();
   const analysis = buildFinalAnalysis(result);
-  $("message").innerHTML = `<div class="result-title">${result.name}</div>${result.desc}`;
+  const collection = collectionStats();
+  $("message").innerHTML = `<div class="result-title">${state.playerName}は、${result.name}</div>${result.desc}`;
   $("choices").innerHTML = `
     <div class="final-analysis">
       <h2>人生リプレイ分析</h2>
+      <p>カード収集率：${collection.acquired} / ${collection.total}（${collection.rate}%）</p>
       <p>${escapeHtml(analysis.overview)}</p>
       <h3>よく選んだ行動</h3>
       <ul>${analysis.topActions.map((item) => `<li>${escapeHtml(item[0])}：${item[1]}回</li>`).join("") || "<li>記録なし</li>"}</ul>
@@ -1162,7 +1385,7 @@ function renderResult() {
       <ul>${analysis.cautions.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>
       <p><strong>これから大切にするとよさそうなこと：</strong>${escapeHtml(analysis.advice)}</p>
     </div>
-    <button class="choice-button" type="button" id="resultAlbum">人生アルバムを見る<small>${state.cards.length}枚のカード</small></button>
+    <button class="choice-button" type="button" id="resultAlbum">人生アルバムを見る<small>${collection.acquired}枚 / ${collection.rate}%</small></button>
     <button class="choice-button" type="button" id="playAgain">もう一度プレイする<small>別の選択でリプレイ</small></button>
   `;
   $("chanceBox").classList.remove("hidden");
@@ -1280,9 +1503,10 @@ function cardCategoryBonus(typeName) {
 function showFinalModal() {
   const result = decideType();
   const analysis = buildFinalAnalysis(result);
+  const collection = collectionStats();
   $("modalTitle").textContent = "最終結果";
   $("modalBody").innerHTML = `
-    <h3>${result.name}</h3>
+    <h3>${state.playerName}は、${result.name}</h3>
     <p>${result.desc}</p>
     <h3>歩んだ人生ルート</h3>
     <ul class="route-list">${state.routes.map((routeName) => `<li>${escapeHtml(routeName)}</li>`).join("") || "<li>地道な日々</li>"}</ul>
@@ -1302,6 +1526,7 @@ function showFinalModal() {
     <h3>最終ステータス</h3>
     <p>学力：${rank(state.academic)}（${state.academic}） / スキル：${rank(state.skill)}（${state.skill}） / 社交性：${rank(state.social)}（${state.social}） / 体力：${state.energy}/100 / 満足度：${moodLevels[state.mood]} / お金：${state.money.toLocaleString()}G</p>
     <h3>人生アルバム</h3>
+    <p>獲得カード数：${collection.acquired} / ${collection.total}（収集率 ${collection.rate}%）</p>
     <div class="card-grid">${state.cards.map(cardHtml).join("") || "<p>カードなし</p>"}</div>
   `;
   showModal();
