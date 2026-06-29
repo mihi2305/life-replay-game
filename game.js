@@ -14,6 +14,10 @@ const cardCatalog = [
   "初めてのスパイク", "監督の一言", "後輩に託した言葉", "初めての英会話ノート", "塾の体験授業",
   "探究発表の資料", "初めてのゼミ発表", "グループワークの沈黙", "インターン選考の通知", "面接官の問い",
   "サークルの集合写真", "留学の航空券", "最初の企画書", "最後の自己分析ノート",
+  "スタメン発表の日", "ベンチから見たピッチ", "夏合宿の夜", "選手権の初戦", "ロッカールームの沈黙",
+  "全国への切符", "優勝メダル", "最後のラストパス", "PK前の静けさ",
+  "初めての模試判定", "C判定の紙", "夏期講習のテキスト", "最終模試の結果",
+  "もう一度開いた参考書", "大学受験直前の机", "解けなかった一問",
   "小学校のアルバム", "中学校のアルバム", "高校のアルバム", "大学のアルバム"
 ].map((name, index) => ({
   id: cardIdFromName(name),
@@ -256,7 +260,7 @@ function initialState() {
     englishExperience: false,
     cramSchoolExperience: false,
     confirmedHighSchoolRoute: "",
-    highSchoolRouteLog: { club: 0, academic: 0, socialWall: 0, academicWall: 0, skillWall: 0 },
+    highSchoolRouteLog: { club: 0, academic: 0, socialWall: 0, academicWall: 0, skillWall: 0, starter: "", coachTrust: 0, teamTrust: 0, playJudgment: 0, tournamentFlow: 0, tournamentResult: "", mockRank: "", mockBonus: 0, quizCorrect: 0, quizAttempts: 0, cramTiming: "" },
     startedAt: new Date().toISOString(),
     choicesLog: [],
     savedRun: null,
@@ -425,8 +429,8 @@ function cardIdFromName(name) {
 
 function inferCardCategory(name) {
   if (name.includes("アルバム")) return "ステージ";
-  if (["初めてのスパイク", "朝練の記憶", "練習ノート", "初めての背番号", "ベンチから見た景色", "監督の一言", "最後の円陣", "後輩に託した言葉", "キャプテンマーク"].includes(name)) return "部活";
-  if (["初めての英会話ノート", "塾の体験授業", "初めての順位表", "赤ペンだらけのノート", "放課後の教え合い", "夜の自習室", "問いを書いたノート", "探究発表の資料", "模試の判定", "志望校のパンフレット", "合格発表の掲示板"].includes(name)) return "勉強";
+  if (["初めてのスパイク", "朝練の記憶", "練習ノート", "初めての背番号", "ベンチから見た景色", "監督の一言", "最後の円陣", "後輩に託した言葉", "キャプテンマーク", "スタメン発表の日", "ベンチから見たピッチ", "夏合宿の夜", "選手権の初戦", "ロッカールームの沈黙", "全国への切符", "優勝メダル", "最後のラストパス", "PK前の静けさ"].includes(name)) return "部活";
+  if (["初めての英会話ノート", "塾の体験授業", "初めての順位表", "赤ペンだらけのノート", "放課後の教え合い", "夜の自習室", "問いを書いたノート", "探究発表の資料", "模試の判定", "志望校のパンフレット", "合格発表の掲示板", "初めての模試判定", "C判定の紙", "夏期講習のテキスト", "最終模試の結果", "もう一度開いた参考書", "大学受験直前の机", "解けなかった一問"].includes(name)) return "勉強";
   if (["初めてのゼミ発表", "グループワークの沈黙", "インターン選考の通知", "面接官の問い", "サークルの集合写真", "留学の航空券", "最初の企画書", "最後の自己分析ノート"].includes(name)) return "大学";
   if (name.includes("受験") || name.includes("参考書") || name.includes("鉛筆") || name.includes("図鑑")) return "勉強";
   if (name.includes("友") || name.includes("班") || name.includes("文化祭") || name.includes("告白") || name.includes("価値観")) return "人間関係";
@@ -437,8 +441,8 @@ function inferCardCategory(name) {
 }
 
 function inferCardRarity(name) {
-  if (["初めての背番号", "ベンチから見た景色", "キャプテンマーク", "監督の一言", "後輩に託した言葉"].includes(name)) return "epic";
-  if (["夜の自習室", "模試の判定", "合格発表の掲示板", "面接官の問い", "インターン選考の通知", "留学の航空券"].includes(name)) return "epic";
+  if (["初めての背番号", "ベンチから見た景色", "キャプテンマーク", "監督の一言", "後輩に託した言葉", "全国への切符", "優勝メダル", "最後のラストパス", "PK前の静けさ"].includes(name)) return "epic";
+  if (["夜の自習室", "模試の判定", "合格発表の掲示板", "面接官の問い", "インターン選考の通知", "留学の航空券", "最終模試の結果", "大学受験直前の机"].includes(name)) return "epic";
   if (["初めての順位表", "赤ペンだらけのノート", "放課後の教え合い", "問いを書いたノート", "志望校のパンフレット"].includes(name)) return "rare";
   if (name.includes("不合格") || name.includes("開かれた") || name.includes("失敗した企画書") || name.includes("知らない街")) return "epic";
   if (name.includes("告白") || name.includes("価値観") || name.includes("アルバム") || name.includes("給料") || name.includes("入部届")) return "rare";
@@ -781,7 +785,7 @@ function restoreStateFromSave(saveData) {
   restored.englishExperience = Boolean(restored.englishExperience || restored.lesson === "英会話");
   restored.cramSchoolExperience = Boolean(restored.cramSchoolExperience || restored.cramSchool);
   restored.confirmedHighSchoolRoute = restored.confirmedHighSchoolRoute || "";
-  restored.highSchoolRouteLog = { club: 0, academic: 0, socialWall: 0, academicWall: 0, skillWall: 0, ...(restored.highSchoolRouteLog || {}) };
+  restored.highSchoolRouteLog = { club: 0, academic: 0, socialWall: 0, academicWall: 0, skillWall: 0, starter: "", coachTrust: 0, teamTrust: 0, playJudgment: 0, tournamentFlow: 0, tournamentResult: "", mockRank: "", mockBonus: 0, quizCorrect: 0, quizAttempts: 0, cramTiming: "", ...(restored.highSchoolRouteLog || {}) };
   restored.effectBuffer = null;
   restored.savedRun = null;
   restored.saveStatus = "";
@@ -1181,6 +1185,7 @@ function fixedEventForTurn() {
   if (turn === 3) return lessonEvent();
   if (turn === 8 && state.lesson && state.lessonStatus !== "quit") return lessonReviewEvent();
   if (turn === 7) return cramEvent();
+  if (turn === 11 && state.cramSchool) return juniorMockExamEvent();
   if (turn === 12) return juniorExamEvent();
   if (turn === 13) return routeEvent("中学校で大切にしたいこと", juniorRoutes());
   if (turn === 14 && state.lesson && state.lessonStatus !== "quit") return juniorLessonDecisionEvent();
@@ -1194,13 +1199,19 @@ function fixedEventForTurn() {
   if (turn === 21) return highSchoolDecisionEvent();
   if (turn === 22 && isClubPathConfirmed()) return highSchoolClubFirstWallEvent();
   if (turn === 22 && isAcademicPathConfirmed()) return highSchoolAcademicFirstWallEvent();
-  if (turn === 24 && isAcademicPathConfirmed()) return highSchoolAcademicInquiryEvent();
-  if (turn === 26 && isClubPathConfirmed()) return highSchoolClubConflictEvent();
+  if (turn === 23 && isClubPathConfirmed()) return highSchoolClubPlayJudgmentEvent();
+  if (turn === 23 && isAcademicPathConfirmed()) return highSchoolAcademicCramChoiceEvent();
+  if (turn === 24 && isClubPathConfirmed()) return highSchoolClubStarterEvent();
+  if (turn === 24 && isAcademicPathConfirmed()) return highSchoolAcademicFirstMockEvent();
+  if (turn === 25 && isClubPathConfirmed()) return highSchoolClubCampEvent();
+  if (turn === 25 && isAcademicPathConfirmed()) return highSchoolAcademicInquiryEvent();
+  if (turn === 26 && isClubPathConfirmed()) return highSchoolClubCoachQuestionEvent();
+  if (turn === 26 && isAcademicPathConfirmed()) return highSchoolAcademicSummerQuizEvent();
   if (turn === 27 && isClubPathConfirmed()) return highSchoolClubAcademicAnxietyEvent();
   if (turn === 27 && isAcademicPathConfirmed()) return highSchoolAcademicRelationshipEvent();
   if (turn === 28) return routeEvent("高校の先に向けて準備する", preUniversityRoutes());
-  if (turn === 29 && isClubPathConfirmed()) return highSchoolClubFinalTournamentEvent();
-  if (turn === 29 && isAcademicPathConfirmed()) return highSchoolAcademicExamEvent();
+  if (turn === 29 && isClubPathConfirmed()) return highSchoolClubChampionshipEvent();
+  if (turn === 29 && isAcademicPathConfirmed()) return highSchoolAcademicFinalMockQuizEvent();
   if (turn === 30) return universityDecisionEvent();
   if (turn === 32) return universityActionEvent();
   if (turn === 36 && isAcademicPathConfirmed()) return universitySeminarPresentationEvent();
@@ -1419,6 +1430,18 @@ function juniorFailureText() {
   return "少しだけ、時間が止まったように感じた。\nでも、ここまで机に向かった時間も、悩みながら続けた日々も、なくなるわけではない。\nお母さんは「よく頑張ったね」と言ってくれた。\n先生も「この経験は、次に必ず残る」と話してくれた。\n新しい場所で、また次の生活が始まる。";
 }
 
+function juniorMockExamEvent() {
+  const rankText = mockRank(mockScore(state.cramSchool ? 4 : 0));
+  return {
+    title: `小6夏。中学受験模試の結果が返ってきた。紙の端には「${rankText}」の文字がある。\n${mockRankText(rankText)}`,
+    choices: [
+      { label: "苦手を一つに絞って直す", text: "全部を一気に変えることはできない。だから、まず一問だけ向き合うことにした。", apply: () => { recordMockResult(rankText); changeStats({ academic: 3, energy: -8, cap: 6 }); addHidden({ 計画志向: 2 }); addCard(rankText === "C判定" ? "C判定の紙" : "初めての模試判定", "勉強", "Rare", "紙に書かれた判定が、次の勉強の形を少し変えた。"); } },
+      quizChoice("算数の小問を解き直す", true, "式を落ち着いて追うと、昨日より少しだけ見通しが立った。", "手は止まったけれど、何が分からないのかは見えた。", "もう一度開いた参考書"),
+      { label: "今日は早めに休む", text: "焦る気持ちはあった。でも、疲れた頭で続けるより、明日もう一度向き合うことにした。", apply: () => { recordMockResult(rankText); changeStats({ energy: 15, mood: Math.min(4, state.mood + 1), cap: 5 }); addHidden({ 安定志向: 2 }); } }
+    ]
+  };
+}
+
 function examChance() {
   let chance = state.academic < 40 ? 20 : state.academic < 55 ? 40 : state.academic < 65 ? 60 : state.academic < 75 ? 75 : 90;
   if (state.cramSchool) chance += 10;
@@ -1428,6 +1451,67 @@ function examChance() {
   if (state.activeEffects.passportCaseBoost && currentInfo().stage === "大学") chance += 5;
   if (state.mood === 0) chance -= 10;
   return clamp(chance, 5, 95);
+}
+
+function mockScore(extra = 0) {
+  let score = state.academic + extra;
+  if (state.cramSchool || state.highSchoolRouteLog.cramTiming) score += 6;
+  score += state.highSchoolRouteLog.mockBonus || 0;
+  score += Math.min(8, (state.highSchoolRouteLog.quizCorrect || 0) * 2);
+  if (state.energy < 25) score -= 8;
+  if (state.mood <= 1) score -= 6;
+  return clamp(score, 0, 100);
+}
+
+function mockRank(score = mockScore()) {
+  if (score >= 78) return "A判定";
+  if (score >= 66) return "B判定";
+  if (score >= 54) return "C判定";
+  if (score >= 42) return "D判定";
+  return "E判定";
+}
+
+function mockRankText(rankText) {
+  return {
+    A判定: "努力が数字になって返ってきた。でも、油断できないことも分かっていた。",
+    B判定: "十分狙える位置にいる。先生の声も、少しだけ明るく聞こえた。",
+    C判定: "今のままでは少し足りない。でも、ここから伸びる人もいる。",
+    D判定: "模試の結果にはD判定の文字があった。塾の先生は「ここから何を変えるかでまだ変わるよ」と言った。",
+    E判定: "志望校まではかなり距離がある。その紙を見た瞬間、胸が少し重くなった。"
+  }[rankText] || "数字が、今の自分の現在地を静かに示していた。";
+}
+
+function recordMockResult(rankText) {
+  state.highSchoolRouteLog.mockRank = rankText;
+  if (["A判定", "B判定"].includes(rankText)) state.highSchoolRouteLog.mockBonus += 3;
+  if (rankText === "C判定") state.highSchoolRouteLog.mockBonus += 1;
+  if (["D判定", "E判定"].includes(rankText)) state.highSchoolRouteLog.mockBonus -= 1;
+}
+
+function quizChoice(label, correct, successText, failText, cardName) {
+  return {
+    label,
+    text: correct ? successText : failText,
+    apply: () => {
+      state.highSchoolRouteLog.quizAttempts += 1;
+      if (correct) {
+        state.highSchoolRouteLog.quizCorrect += 1;
+        state.highSchoolRouteLog.mockBonus += 2;
+        changeStats({ academic: 4, mood: Math.min(4, state.mood + 1), cap: 6 });
+        addHidden({ 計画志向: 1, 達成志向: 1 });
+      } else {
+        changeStats({ academic: 1, mood: Math.max(0, state.mood - 1), cap: 5 });
+        addHidden({ 探索志向: 1 });
+        addCard("解けなかった一問", "勉強", "Rare", "解けなかった問題ほど、あとで何度も頭に残った。");
+      }
+      if (cardName) addCard(cardName, "勉強", correct ? "Rare" : "Common", correct ? successText : failText);
+    }
+  };
+}
+
+function clubCheck(primary, threshold, bonus = 0) {
+  const value = { skill: state.skill, social: state.social, academic: state.academic, energy: state.energy, mood: state.mood * 18 }[primary] || 0;
+  return value + bonus + Math.floor(Math.random() * 12) >= threshold;
 }
 
 function routeEvent(title, routes) {
@@ -1480,12 +1564,14 @@ function highSchoolRoutes() {
 function universityRoutes() {
   const fromClub = isClubPathConfirmed();
   const fromAcademic = isAcademicPathConfirmed();
-  const sportsQualified = state.skill >= 60 || (fromClub && state.skill >= 45) || (hasClubStrongHighSchool() && state.skill >= 50) || (state.clubRoute.finalTournament && state.clubRoute.eventCount >= 2 && state.skill >= 48);
+  const strongTournament = ["ベスト8", "準決勝", "決勝", "優勝"].includes(state.highSchoolRouteLog.tournamentResult);
+  const sportsQualified = state.skill >= 60 || (fromClub && state.skill >= 45) || (state.highSchoolRouteLog.starter && state.skill >= 42) || strongTournament || (hasClubStrongHighSchool() && state.skill >= 50) || (state.clubRoute.finalTournament && state.clubRoute.eventCount >= 2 && state.skill >= 48);
   const academicDepth = academicRouteDepth();
-  const researchQualified = (state.academic >= 50 && state.money >= 7000) || (fromAcademic && state.academic >= 45 && state.skill >= 38) || (academicDepth >= 3 && state.academic >= 45 && state.money >= 5000);
-  const abroadQualified = (state.academic >= 55 && state.skill >= 55 && state.money >= 18000) || (fromAcademic && state.academic >= 52 && state.money >= 12000 && state.skill >= 38) || (hasAdvancedHighSchool() && state.academic >= 50 && state.skill >= 45 && state.money >= 14000) || (state.academicRoute.inquiry >= 3 && state.academic >= 50 && state.money >= 12000);
-  const internshipQualified = state.academic >= 45 || state.skill >= 45 || (fromClub && state.skill >= 45 && state.social >= 38) || (fromAcademic && state.academic >= 42 && state.skill >= 38) || (academicDepth >= 2 && (state.academic >= 40 || state.skill >= 40));
-  const startupQualified = (state.skill >= 65 && state.social >= 50 && state.money >= 12000) || (fromClub && state.skill >= 55 && state.social >= 45 && state.money >= 9000);
+  const mockGood = ["A判定", "B判定"].includes(state.highSchoolRouteLog.mockRank) || (state.highSchoolRouteLog.mockBonus || 0) >= 6;
+  const researchQualified = (state.academic >= 50 && state.money >= 7000) || (fromAcademic && state.academic >= 45 && state.skill >= 38) || (mockGood && state.skill >= 36) || (academicDepth >= 3 && state.academic >= 45 && state.money >= 5000);
+  const abroadQualified = (state.academic >= 55 && state.skill >= 55 && state.money >= 18000) || (fromAcademic && state.academic >= 52 && state.money >= 12000 && state.skill >= 38) || (mockGood && state.money >= 12000 && state.skill >= 40) || (hasAdvancedHighSchool() && state.academic >= 50 && state.skill >= 45 && state.money >= 14000) || (state.academicRoute.inquiry >= 3 && state.academic >= 50 && state.money >= 12000);
+  const internshipQualified = state.academic >= 45 || state.skill >= 45 || (fromClub && state.skill >= 45 && state.social >= 38) || (strongTournament && state.academic >= 38) || (fromAcademic && state.academic >= 42 && state.skill >= 38) || mockGood || (academicDepth >= 2 && (state.academic >= 40 || state.skill >= 40));
+  const startupQualified = (state.skill >= 65 && state.social >= 50 && state.money >= 12000) || (fromClub && state.skill >= 55 && state.social >= 45 && state.money >= 9000) || (strongTournament && state.social >= 45 && state.money >= 8000);
   const circleQualified = state.social >= 60 || (fromClub && state.social >= 45) || (state.relationship.affection >= 4);
   return [
     route("留学ルート", abroadQualified, "学力C以上・スキルC以上・18000G以上 または 進学校ルートで探究を深める", "知らない街の朝を見に行く。", { academic: 2, skill: 2, money: -9000, cap: 6 }, { 探索志向: 3, 挑戦志向: 2 }, "知らない街の朝", "Epic", "study_abroad"),
@@ -1625,14 +1711,54 @@ function highSchoolClubFirstWallEvent() {
   };
 }
 
-function highSchoolClubConflictEvent() {
+function highSchoolClubPlayJudgmentEvent() {
+  return {
+    title: "高1夏。練習試合の後半10分。右サイドでボールを受けた。相手DFが前にいる。中央にはフリーの味方。でも、自分で抜けばシュートまで行けそうだ。",
+    choices: [
+      { label: "ドリブルで勝負する", text: clubCheck("skill", 58) ? "一歩目で相手の重心を外した。監督が小さく頷いたのが見えた。" : "仕掛けた勇気はあった。でも相手DFに読まれ、ボールはラインを割った。", apply: () => { const ok = clubCheck("skill", 58); state.highSchoolRouteLog.playJudgment += ok ? 3 : 1; state.highSchoolRouteLog.coachTrust += ok ? 2 : 0; changeStats(ok ? { skill: 4, mood: Math.min(4, state.mood + 1), cap: 7 } : { skill: 1, mood: Math.max(0, state.mood - 1), cap: 5 }); addHidden({ 挑戦志向: 2, 達成志向: 1 }); addCard(ok ? "初めての背番号" : "ベンチから見たピッチ", "部活", ok ? "Epic" : "Rare", ok ? "自分で仕掛けた一歩が、評価に変わった。" : "うまくいかなかった判断も、試合の景色として残った。"); } },
+      { label: "中央の味方にパスする", text: clubCheck("social", 52) ? "味方を信じて出したパスが、きれいに前を向かせた。チームの声が少し大きくなった。" : "パスは少しずれた。それでも、味方を見る意識は次のプレーにつながりそうだった。", apply: () => { const ok = clubCheck("social", 52); state.highSchoolRouteLog.playJudgment += ok ? 3 : 1; state.highSchoolRouteLog.teamTrust += ok ? 3 : 1; changeStats(ok ? { social: 3, skill: 1, cap: 6 } : { social: 1, mood: Math.max(0, state.mood - 1), cap: 5 }); addHidden({ 協調志向: 2 }); addCard(ok ? "最後のラストパス" : "練習ノート", "部活", ok ? "Epic" : "Rare", "味方を信じる判断が、チームの中の評価を変えた。"); } },
+      { label: "一度後ろに戻して作り直す", text: clubCheck("academic", 50) ? "無理に進まず、相手の形を見て作り直した。監督は「よく見えていた」と言った。" : "安全に戻したつもりが、少し判断が遅れた。試合の速さの中で考える難しさが残った。", apply: () => { const ok = clubCheck("academic", 50); state.highSchoolRouteLog.playJudgment += ok ? 2 : 0; state.highSchoolRouteLog.coachTrust += ok ? 2 : 0; changeStats(ok ? { academic: 2, skill: 1, cap: 6 } : { academic: 1, mood: Math.max(0, state.mood - 1), cap: 5 }); addHidden({ 計画志向: 2, 安定志向: 1 }); addCard("監督の一言", "部活", "Epic", "考える力が、試合中の判断にもつながった。"); } }
+    ]
+  };
+}
+
+function highSchoolClubStarterEvent() {
+  const score = state.skill + Math.floor(state.social / 2) + Math.floor(state.energy / 4) + (state.highSchoolRouteLog.playJudgment || 0) + (state.highSchoolRouteLog.teamTrust || 0);
+  const starter = score >= 95 ? "starter" : score >= 75 ? "sub" : "bench";
+  state.highSchoolRouteLog.starter = starter;
+  const title = starter === "starter"
+    ? "高1冬。スタメン表に、自分の名前があった。胸が熱くなる一方で、ここから外される怖さも始まった。"
+    : starter === "sub"
+      ? "高1冬。スタメンではなかった。でも、途中出場のメンバーとして名前を呼ばれた。監督は「お前の役割は必ずある」と言った。"
+      : "高1冬。スタメン表に、自分の名前はなかった。監督は「技術だけではなく、チームの中でどう生きるかを考えてほしい」と言った。";
+  return {
+    title,
+    choices: [
+      { label: "次のチャンスを取りに行く", text: starter === "bench" ? "悔しさを飲み込んで、まずはベンチから試合を見た。見えるものは、思っていたより多かった。" : "名前を呼ばれた責任を、次の練習に持ち込んだ。", apply: () => { changeStats(starter === "bench" ? { skill: 2, academic: 1, cap: 6 } : { skill: 3, energy: -8, cap: 6 }); addHidden({ 達成志向: 2 }); addCard(starter === "starter" ? "スタメン発表の日" : "ベンチから見たピッチ", "部活", starter === "starter" ? "Rare" : "Rare", title); } },
+      { label: "仲間の役割を観察する", text: "自分だけを見ていた視線を、チーム全体へ向けた。味方の動きが少しずつ読めてきた。", apply: () => { state.highSchoolRouteLog.teamTrust += 2; changeStats({ social: 2, academic: 1, cap: 6 }); addHidden({ 協調志向: 2, 計画志向: 1 }); addCard("ベンチから見たピッチ", "部活", "Rare", "外から見た試合にも、次に活きる景色があった。"); } }
+    ]
+  };
+}
+
+function highSchoolClubCampEvent() {
+  return {
+    title: "高2夏。夏合宿の夜。体は限界に近い。それでも、同じ部屋の仲間たちは明日の練習の話をしていた。",
+    choices: [
+      { label: "自主練に付き合う", text: "眠気よりも、少しでも上手くなりたい気持ちが勝った。仲間と残した汗が、翌朝の声を変えた。", apply: () => { state.highSchoolRouteLog.teamTrust += 2; state.highSchoolRouteLog.tournamentFlow += 1; changeStats({ skill: 3, social: 1, energy: -12, cap: 6 }); addHidden({ 達成志向: 2, 協調志向: 1 }); addCard("夏合宿の夜", "部活", "Rare", "疲れた夜に交わした言葉が、チームの空気を少し変えた。"); } },
+      { label: "戦術ノートを見返す", text: "相手を見ること、味方の位置を考えること。走るだけではない準備が、少しずつ試合につながっていく。", apply: () => { state.highSchoolRouteLog.coachTrust += 2; changeStats({ academic: 2, skill: 1, cap: 6 }); addHidden({ 計画志向: 2 }); addCard("練習ノート", "部活", "Rare", "考える力も、ピッチの中で武器になる。"); } },
+      { label: "早めに寝る", text: "最後まで走るために、今日は休むことを選んだ。体が戻ると、練習の質も少し変わった。", apply: () => { changeStats({ energy: 18, mood: Math.min(4, state.mood + 1), cap: 5 }); addHidden({ 安定志向: 2 }); } }
+    ]
+  };
+}
+
+function highSchoolClubCoachQuestionEvent() {
   const goodSocial = state.social >= 50;
   return {
-    title: "高2秋。練習中、味方のミスに強く言いすぎてしまった。数日後、監督に呼ばれた。「勝ちたいのは分かる。でも、仲間が何を感じているかを考えられないままでは、大事な試合では使えない。」",
+    title: "高2秋。練習後、監督に呼ばれた。「お前は上手い。でも、今日のあの場面、味方は何を感じていたと思う？」",
     choices: [
-      { label: "自分の正しさを説明する", text: goodSocial ? "言い方は強かったと認めたうえで、試合で見えていたことを落ち着いて伝えた。仲間も少しだけ耳を傾けてくれた。" : "言っていることは間違っていないはずなのに、言葉はチームの中でうまく届かなかった。次の日の練習で、距離はまだ残っていた。", apply: () => { state.highSchoolRouteLog.club += 1; if (!goodSocial) state.highSchoolRouteLog.socialWall += 1; changeStats(goodSocial ? { skill: 2, social: 1, cap: 6 } : { skill: 1, mood: Math.max(0, state.mood - 1), cap: 5 }); addHidden(goodSocial ? { 計画志向: 1, 協調志向: 1 } : { 自立志向: 2 }); addCard("監督の一言", "部活", "Epic", "勝つための言葉にも、相手に届く形が必要だった。"); } },
-      { label: "チームメイトに謝りに行く", text: "勝ちたい気持ちを盾にしていたことを、少しずつ言葉にした。すぐ元通りではないけれど、並んで走る空気は戻ってきた。", apply: () => { state.highSchoolRouteLog.club += 1; changeStats({ social: 3, mood: Math.min(4, state.mood + 1), cap: 6 }); addHidden({ 協調志向: 2, 安定志向: 1 }); addCard("最後の円陣", "部活", "Rare", "関係を直すことも、チームのための練習だった。"); } },
-      { label: "黙って練習で示す", text: "言葉にするのは苦手だった。だから誰よりも走った。ただ、走るだけでは届かないものがあることも、少し分かっていた。", apply: () => { state.highSchoolRouteLog.club += 1; if (state.social < 45) state.highSchoolRouteLog.socialWall += 1; changeStats({ skill: 3, energy: -10, cap: 6 }); addHidden({ 達成志向: 2, 自立志向: 1 }); addCard("朝練の記憶", "部活", "Rare", "黙って積む努力は強い。でも、いつか言葉も必要になる。"); } }
+      { label: "ミスをして悔しかったと思う", text: "監督は少し黙ってから、「それが分かるなら、次は声のかけ方を変えられる」と言った。", apply: () => { state.highSchoolRouteLog.club += 1; state.highSchoolRouteLog.teamTrust += 3; state.highSchoolRouteLog.coachTrust += 2; changeStats({ social: 3, skill: 1, cap: 6 }); addHidden({ 協調志向: 2, 計画志向: 1 }); addCard("監督の一言", "部活", "Epic", "上手いだけではなく、感じ取る力も問われていた。"); } },
+      { label: "自分が決めるべきだったと思う", text: goodSocial ? "監督は「その責任感は分かる。でも、勝つには味方を使う勇気もいる」と言った。" : "監督の表情は硬かった。「お前一人で勝つ試合じゃない」と言われ、胸が少し重くなった。", apply: () => { state.highSchoolRouteLog.club += 1; if (!goodSocial) state.highSchoolRouteLog.socialWall += 1; changeStats(goodSocial ? { skill: 2, social: 1, cap: 6 } : { skill: 2, mood: Math.max(0, state.mood - 1), cap: 5 }); addHidden({ 自立志向: 2, 達成志向: 1 }); addCard("ロッカールームの沈黙", "部活", "Rare", "勝ちたい気持ちが、チームとの距離を作ることもあった。"); } },
+      { label: "次はもっと強く言うべきだったと思う", text: "監督は首を横に振った。「強い言葉で人は動かない。信頼を失うぞ」と言われた。", apply: () => { state.highSchoolRouteLog.club += 1; state.highSchoolRouteLog.socialWall += 1; state.highSchoolRouteLog.teamTrust -= 2; changeStats({ skill: 1, mood: Math.max(0, state.mood - 1), cap: 5 }); addHidden({ 自立志向: 2 }); addCard("ロッカールームの沈黙", "部活", "Rare", "正しさだけでは、チームは動かなかった。"); } }
     ]
   };
 }
@@ -1660,6 +1786,38 @@ function highSchoolClubFinalTournamentEvent() {
   };
 }
 
+function highSchoolClubChampionshipEvent() {
+  return {
+    title: "高3夏。選手権予選、後半アディショナルタイム。スコアは1-1。ペナルティエリア手前でボールを受けた。右にはフリーの味方。正面には相手DF。一瞬で決めなければならない。",
+    choices: [
+      { label: "自分でシュートを打つ", text: clubCheck("skill", 62, state.highSchoolRouteLog.playJudgment) ? "左足を振り抜くと、ボールは低くゴール隅へ飛んだ。ベンチが一斉に立ち上がった。" : "シュートはわずかに外れた。膝に手をついた瞬間、歓声が遠く聞こえた。", apply: () => { const ok = clubCheck("skill", 62, state.highSchoolRouteLog.playJudgment); state.highSchoolRouteLog.tournamentFlow += ok ? 4 : 0; changeStats(ok ? { skill: 4, mood: Math.min(4, state.mood + 1), cap: 7 } : { skill: 1, mood: Math.max(0, state.mood - 1), cap: 5 }); addHidden({ 挑戦志向: 2, 達成志向: 1 }); addCard(ok ? "選手権の初戦" : "ロッカールームの沈黙", "部活", ok ? "Rare" : "Rare", ok ? "自分で打つ判断が、チームを前へ進めた。" : "届かなかった一瞬も、選手権の記憶として残った。"); resolveChampionshipResult(ok ? 2 : 0); } },
+      { label: "右の味方にパスを出す", text: clubCheck("social", 58, state.highSchoolRouteLog.teamTrust) ? "味方を信じたパスが通った。次の瞬間、ゴールネットが揺れた。" : "パスは読まれた。それでも、味方を見た判断はチームの中に残った。", apply: () => { const ok = clubCheck("social", 58, state.highSchoolRouteLog.teamTrust); state.highSchoolRouteLog.tournamentFlow += ok ? 4 : 1; state.highSchoolRouteLog.teamTrust += ok ? 2 : 0; changeStats(ok ? { social: 3, skill: 1, mood: Math.min(4, state.mood + 1), cap: 7 } : { social: 1, mood: Math.max(0, state.mood - 1), cap: 5 }); addHidden({ 協調志向: 2 }); addCard(ok ? "最後のラストパス" : "選手権の初戦", "部活", ok ? "Epic" : "Rare", "味方を信じる一瞬が、勝負の形を変えた。"); resolveChampionshipResult(ok ? 2 : 0); } },
+      { label: "キープしてファウルをもらいに行く", text: clubCheck("energy", 56, Math.floor(state.academic / 4)) ? "体を入れて粘ると、笛が鳴った。セットプレーのチャンスに、チーム全員が前を向いた。" : "粘ろうとした一瞬、足が止まった。ボールは相手に渡り、時計だけが進んだ。", apply: () => { const ok = clubCheck("energy", 56, Math.floor(state.academic / 4)); state.highSchoolRouteLog.tournamentFlow += ok ? 3 : 0; changeStats(ok ? { academic: 2, skill: 1, energy: -8, cap: 6 } : { energy: -8, mood: Math.max(0, state.mood - 1), cap: 5 }); addHidden({ 計画志向: 2, 安定志向: 1 }); addCard("PK前の静けさ", "部活", "Epic", "体力と判断力で、最後の一秒を引き寄せた。"); if (ok && state.energy >= 35) state.highSchoolRouteLog.tournamentFlow += 1; resolveChampionshipResult(ok ? 1 : 0); } }
+    ]
+  };
+}
+
+function resolveChampionshipResult(lastPlayBonus = 0) {
+  const starterBonus = state.highSchoolRouteLog.starter === "starter" ? 8 : state.highSchoolRouteLog.starter === "sub" ? 4 : 0;
+  const score = state.skill + Math.floor(state.social / 2) + Math.floor(state.energy / 3) + starterBonus + (state.highSchoolRouteLog.tournamentFlow || 0) + lastPlayBonus + (state.highSchoolRouteLog.coachTrust || 0) + (state.highSchoolRouteLog.teamTrust || 0);
+  let result = "初戦敗退";
+  if (score >= 125) result = "優勝";
+  else if (score >= 112) result = "決勝";
+  else if (score >= 100) result = "準決勝";
+  else if (score >= 88) result = "ベスト8";
+  else if (score >= 76) result = "ベスト16";
+  state.highSchoolRouteLog.tournamentResult = result;
+  if (["ベスト16", "ベスト8", "準決勝", "決勝", "優勝"].includes(result)) {
+    addNotice(`選手権結果：${result}！この経験は大学や就活にも残りそうだ。`, result === "優勝" ? "special" : "strong");
+    state.highSchoolRouteLog.mockBonus += result === "優勝" ? 4 : 1;
+  } else {
+    addNotice("選手権は初戦で終わった。でも、あの一瞬に向き合った時間は消えない。", "normal");
+  }
+  if (result === "優勝") addCard("優勝メダル", "部活", "Epic", "勝ち切った経験が、次の人生の場面でも背中を押した。");
+  else if (["決勝", "準決勝", "ベスト8"].includes(result)) addCard("全国への切符", "部活", "Epic", "勝ち進んだ時間が、チームの記憶として残った。");
+  else if (result === "初戦敗退") addCard("ロッカールームの沈黙", "部活", "Rare", "負けた後の静けさも、人生の一枚になった。");
+}
+
 function highSchoolAcademicFirstWallEvent() {
   return {
     title: "高1春。進学校に入ると、周りもみんな勉強ができた。中学では上位だった自分が、ここでは普通の存在になった。",
@@ -1667,6 +1825,29 @@ function highSchoolAcademicFirstWallEvent() {
       choice("もう一度、勉強量で追いつく", "焦りをそのまま机に向けた。分からない場所をひとつずつ減らすしかなかった。", { academic: 4, energy: -12, mood: Math.max(0, state.mood - 1), cap: 7 }, { 計画志向: 2, 達成志向: 1 }, "赤ペンだらけのノート", () => { state.highSchoolRouteLog.academic += 1; }),
       choice("友達と悩みを共有する", "同じように不安な人がいると知って、少し肩の力が抜けた。競争の中にも支え合える場所はあった。", { social: 3, academic: 1, mood: Math.min(4, state.mood + 1), cap: 6 }, { 協調志向: 2, 探索志向: 1 }, "放課後の教え合い", () => { state.highSchoolRouteLog.academic += 1; }),
       choice("自分の得意分野を探す", "順位で全員に勝つより、自分が深く潜れる場所を探したくなった。小さな問いが、進路の地図になり始めた。", { skill: 3, academic: 1, cap: 6 }, { 探索志向: 3, 自立志向: 1 }, "問いを書いたノート", () => { state.highSchoolRouteLog.academic += 1; })
+    ]
+  };
+}
+
+function highSchoolAcademicCramChoiceEvent() {
+  return {
+    title: "高1夏。進学校の授業には少し慣れてきた。でも周りの何人かは、もう塾や予備校に通い始めているらしい。",
+    choices: [
+      { label: "早めに塾に入る", text: "少し早いかもしれない。でも、分からない場所を放っておく方が怖かった。", apply: () => { state.highSchoolRouteLog.cramTiming = "early"; state.highSchoolRouteLog.mockBonus += 5; changeStats({ academic: 3, money: -2500, energy: -8, cap: 6 }); addHidden({ 計画志向: 2, 達成志向: 1 }); addCard("夏期講習のテキスト", "勉強", "Rare", "厚いテキストが、受験までの距離を少し現実にした。"); } },
+      { label: "学校の課題をやり切る", text: "外に増やす前に、目の前の課題を丁寧に片づけることにした。", apply: () => { state.highSchoolRouteLog.mockBonus += 2; changeStats({ academic: 2, skill: 1, cap: 6 }); addHidden({ 安定志向: 1, 計画志向: 1 }); addCard("赤ペンだらけのノート", "勉強", "Rare", "足元の課題を直す時間も、受験の準備だった。"); } },
+      { label: "友達と情報を集める", text: "一人で焦るより、同じ不安を持つ友達と話した。塾の話も、少しだけ現実的に見えた。", apply: () => { changeStats({ social: 2, academic: 1, mood: Math.min(4, state.mood + 1), cap: 6 }); addHidden({ 協調志向: 2, 探索志向: 1 }); addCard("放課後の教え合い", "勉強", "Rare", "情報も不安も、話すことで少し整理された。"); } }
+    ]
+  };
+}
+
+function highSchoolAcademicFirstMockEvent() {
+  const rankText = mockRank(mockScore());
+  return {
+    title: `高1冬。初めての高校模試が返ってきた。判定は「${rankText}」。\n${mockRankText(rankText)}`,
+    choices: [
+      { label: "判定をノートに貼る", text: "目をそらしたくなる数字も、机の前に貼ると次にやることへ変わっていった。", apply: () => { recordMockResult(rankText); changeStats({ academic: 2, energy: -6, cap: 6 }); addHidden({ 計画志向: 2 }); addCard(rankText === "C判定" ? "C判定の紙" : "初めての模試判定", "勉強", "Rare", mockRankText(rankText)); } },
+      { label: "先生に相談する", text: "判定だけでは分からない弱点を聞いた。次の一ヶ月が、少し具体的になった。", apply: () => { recordMockResult(rankText); state.highSchoolRouteLog.mockBonus += state.social >= 45 ? 2 : 0; changeStats({ social: 1, academic: 2, cap: 6 }); addHidden({ 協調志向: 1, 計画志向: 1 }); } },
+      { label: "今日は少し休む", text: "結果に飲まれそうだったから、今日は早めに眠ることにした。立て直すのも、続けるための準備だった。", apply: () => { recordMockResult(rankText); changeStats({ energy: 14, mood: Math.min(4, state.mood + 1), cap: 5 }); addHidden({ 安定志向: 2 }); } }
     ]
   };
 }
@@ -1679,6 +1860,18 @@ function highSchoolAcademicInquiryEvent() {
       choice("文献を読み込む", "知識は増えた。でも、読んだことを自分の形にする難しさも残った。", { academic: 3, cap: 6 }, { 計画志向: 2 }, "問いを書いたノート", () => { state.highSchoolRouteLog.academic += 1; if (lowSkill) state.highSchoolRouteLog.skillWall += 1; }),
       choice("発表資料を作る", "調べたことを図や言葉に置き換えると、理解していたつもりの穴が見えてきた。", { skill: 3, academic: 1, cap: 6 }, { 探索志向: 2, 達成志向: 1 }, "探究発表の資料", () => { state.highSchoolRouteLog.academic += 1; }),
       choice("班のメンバーと役割分担する", "一人で抱えるより、違う得意を合わせた方がテーマは前に進んだ。", { social: 2, skill: 2, cap: 6 }, { 協調志向: 2, 計画志向: 1 }, "グループワークの沈黙", () => { state.highSchoolRouteLog.academic += 1; })
+    ]
+  };
+}
+
+function highSchoolAcademicSummerQuizEvent() {
+  return {
+    title: "高2夏。夏期講習の終わりに、先生が小さな確認問題を出した。\n問題：“I have lived here for three years.” の時制は？",
+    choices: [
+      quizChoice("現在完了", true, "現在完了だと気づけた。積み重ねた文法が、少しだけ自信になった。", "手は止まったけれど、何が分からないのかは見えた。", "夏期講習のテキスト"),
+      quizChoice("過去形", false, "現在完了だと気づけた。", "過去形だと思ってしまった。悔しいけれど、間違い方が分かった。", "解けなかった一問"),
+      quizChoice("未来形", false, "現在完了だと気づけた。", "単語だけを見て、時制の形を見落としてしまった。", "解けなかった一問"),
+      quizChoice("命令文", false, "現在完了だと気づけた。", "文の形を落ち着いて見る必要があった。", "解けなかった一問")
     ]
   };
 }
@@ -1706,13 +1899,27 @@ function highSchoolAcademicExamEvent() {
   };
 }
 
+function highSchoolAcademicFinalMockQuizEvent() {
+  const rankText = mockRank(mockScore(6));
+  return {
+    title: `高3秋。最終模試の結果が返ってきた。判定は「${rankText}」。大学受験直前の机には、開きっぱなしの参考書がある。\n直前確認：“because” は何を表す？`,
+    choices: [
+      quizChoice("理由", true, "理由を表す接続詞。口に出した瞬間、少し落ち着いた。", "意味は見たことがあるのに、焦って言葉が出てこなかった。", "大学受験直前の机"),
+      quizChoice("逆接", false, "理由を表す接続詞。", "however と混ざってしまった。焦りが、基本を少し曇らせた。", "解けなかった一問"),
+      quizChoice("比較", false, "理由を表す接続詞。", "than のような比較表現とは違う。付箋を貼って覚え直した。", "解けなかった一問"),
+      quizChoice("場所", false, "理由を表す接続詞。", "where と混ざってしまった。直前でも、穴は見つかる。", "解けなかった一問"),
+      { label: "判定を受け止めて志望校を調整する", text: `${mockRankText(rankText)} それでも、ここから最後の一歩をどう踏むかは自分で決める。`, apply: () => { recordMockResult(rankText); state.highSchoolRouteLog.mockBonus += ["A判定", "B判定"].includes(rankText) ? 4 : rankText === "C判定" ? 2 : 0; changeStats({ academic: 3, energy: -8, cap: 6 }); addHidden({ 計画志向: 2, 達成志向: 1 }); addCard(rankText === "C判定" ? "C判定の紙" : "最終模試の結果", "勉強", "Epic", "最後の判定が、受験までの時間を一気に現実へ近づけた。"); } }
+    ]
+  };
+}
+
 function universityDecisionEvent() {
   const routes = universityRoutes().filter((r) => r.ok);
   if (!routes.some((r) => r.name.includes("難関")) && state.academic < 45) routes.push(route("浪人・再挑戦ルート", true, "大学受験失敗時", "もう一年、自分のペースで挑み直す。", { academic: 5, money: -3000, mood: 2 }, { 達成志向: 2, 安定志向: 1 }, "再挑戦の春", "Epic"));
   return {
     title: "大学受験の結果発表の日が来た。",
     choices: routes.map((r) => {
-      const success = !r.name.includes("浪人");
+      const success = !r.name.includes("浪人") && (!isAcademicPathConfirmed() || universityExamChance(r) > Math.floor(Math.random() * 100));
       return {
         label: r.name,
         text: success ? universitySuccessText(r.name) : examFailureText("大学受験"),
@@ -1722,21 +1929,37 @@ function universityDecisionEvent() {
           successText: universitySuccessText(r.name),
           failureText: examFailureText("大学受験"),
           apply: () => {
-            state.routes.push(r.name);
-            state.routeChoices.push(r.name);
-            if (r.uniKey) {
+            const routeName = success ? r.name : "浪人・再挑戦ルート";
+            state.routes.push(routeName);
+            state.routeChoices.push(routeName);
+            if (success && r.uniKey) {
               state.currentUniversityRoute = r.uniKey;
               state.universityRouteLabel = r.name;
               state.studyAbroadDeparted = false;
             }
-            changeStats(r.delta);
-            addHidden(r.hidden);
-            addCard(r.card || r.name, "進学", r.rarity || "Rare", r.desc);
+            changeStats(success ? r.delta : { academic: 3, money: -3000, mood: 2, cap: 6 });
+            addHidden(success ? r.hidden : { 達成志向: 2, 安定志向: 1 });
+            addCard(success ? r.card || r.name : "不合格通知", "進学", success ? r.rarity || "Rare" : "Epic", success ? r.desc : "届かなかった結果も、もう一度立ち上がるための記憶になった。");
+            if (!success) addCard("もう一度開いた参考書", "勉強", "Rare", "悔しさのあとで開いたページは、前より少し重かった。");
           }
         })
       };
     })
   };
+}
+
+function universityExamChance(route) {
+  let chance = state.academic >= 78 ? 86 : state.academic >= 66 ? 72 : state.academic >= 54 ? 56 : state.academic >= 42 ? 38 : 22;
+  chance += state.highSchoolRouteLog.mockBonus || 0;
+  chance += Math.min(10, (state.highSchoolRouteLog.quizCorrect || 0) * 2);
+  if (state.highSchoolRouteLog.cramTiming === "early") chance += 8;
+  if (route.uniKey === "research" && state.skill >= 50) chance += 5;
+  if (route.uniKey === "internship" && state.social >= 50) chance += 5;
+  if (state.energy < 25) chance -= 12;
+  if (state.mood <= 1) chance -= 10;
+  if (state.social >= 55) chance += 4;
+  if (state.skill >= 55) chance += 4;
+  return clamp(chance, 10, 94);
 }
 
 function universitySeminarPresentationEvent() {
@@ -2434,6 +2657,7 @@ async function saveCurrentRun(result) {
     choices_log: state.choicesLog,
     routes: state.routes,
     confirmed_high_school_route: state.confirmedHighSchoolRoute,
+    high_school_route_log: state.highSchoolRouteLog,
     cards_earned: state.cards.map((card) => ({ id: card.id, name: card.name, rarity: card.rarity, category: card.category })),
     started_at: state.startedAt,
     finished_at: new Date().toISOString()
