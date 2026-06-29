@@ -59,6 +59,7 @@ drop policy if exists "anon can write players" on players;
 drop policy if exists "anon can update players" on players;
 drop policy if exists "anon can read play runs" on play_runs;
 drop policy if exists "anon can write play runs" on play_runs;
+drop policy if exists "anon can update play runs" on play_runs;
 drop policy if exists "anon can read card catalog" on card_catalog;
 drop policy if exists "anon can write card catalog" on card_catalog;
 drop policy if exists "anon can update card catalog" on card_catalog;
@@ -72,6 +73,7 @@ create policy "anon can update players" on players for update to anon using (tru
 
 create policy "anon can read play runs" on play_runs for select to anon using (true);
 create policy "anon can write play runs" on play_runs for insert to anon with check (true);
+create policy "anon can update play runs" on play_runs for update to anon using (true) with check (true);
 
 create policy "anon can read card catalog" on card_catalog for select to anon using (true);
 create policy "anon can write card catalog" on card_catalog for insert to anon with check (true);
