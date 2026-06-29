@@ -4,6 +4,7 @@ dist
 build
 .env
 .env.local
+supabaseConfig.js
 .vercel
 npm-debug.log*
 yarn-debug.log*

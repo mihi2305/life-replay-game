@@ -71,14 +71,18 @@ Supabase設定がない場合は、localStorageへ保存されます。
 
 Supabaseを使う場合は、`index.html` の以下を設定してください。
 
-```html
-window.LIFE_REPLAY_SUPABASE_CONFIG = {
-  url: "https://YOUR_PROJECT.supabase.co",
-  anonKey: "YOUR_SUPABASE_ANON_KEY"
-};
+```text
+SUPABASE_URL=https://YOUR_PROJECT.supabase.co
+SUPABASE_ANON_KEY=YOUR_SUPABASE_ANON_KEY
 ```
 
+Vercelでは Project Settings の Environment Variables に上記2つを設定してください。
+`npm run build` 時に `supabaseConfig.js` が生成され、ブラウザ側へ anon key だけが渡されます。
+`service_role` key は絶対にフロントエンドへ渡さないでください。
+
 データベース作成SQLは [supabase/schema.sql](supabase/schema.sql) にあります。
+Supabase接続後にカード図鑑保存まで使う場合は、このSQLをSupabase SQL Editorで実行してください。
+`card_catalog` はゲーム起動時にanon keyで同期され、`collected_cards` の外部キー先として使われます。
 
 まだ実装していないもの:
 
