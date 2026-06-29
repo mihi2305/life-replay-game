@@ -77,6 +77,8 @@ const typeDefs = [
 ];
 
 let state;
+let availableCurrentSave = null;
+let persistTimer = null;
 
 function initialState() {
   return {
@@ -116,6 +118,7 @@ function initialState() {
     pendingOutcome: null,
     pendingExamReveal: null,
     afterOutcome: null,
+    afterOutcomeKey: "",
     effectBuffer: null,
     lastMoodItemTurn: -99,
     lastStage: "小学校"
@@ -129,7 +132,7 @@ function ensureStorageLayer() {
   const playerKey = "lifeReplay.anonymousPlayerId";
   const runsKey = "lifeReplay.playRuns";
   const cardsKey = "lifeReplay.collectedCards";
-  const progressKey = "lifeReplay.currentProgress";
+  const progressKey = "lifeReplayCurrentSave";
   const read = (key, fallback) => {
     try {
       return JSON.parse(window.localStorage.getItem(key) || JSON.stringify(fallback));
@@ -170,16 +173,26 @@ function ensureStorageLayer() {
       return { source: "local" };
     },
     listCollectedCards: async () => read(cardsKey, {}),
-    saveCurrentProgress: (progress) => {
+    saveCurrentProgress: async (progress) => {
       const playerId = window.LifeReplayStorage.getPlayerId();
-      write(`${progressKey}.${playerId}`, { ...progress, updatedAt: new Date().toISOString() });
-      return { source: "local" };
+      const payload = {
+        player_id: playerId,
+        save_data: progress,
+        current_turn: (progress.turnIndex ?? 0) + 1,
+        current_stage: progress.stage || "",
+        current_period: progress.date || "",
+        updated_at: new Date().toISOString(),
+        savedTo: "local"
+      };
+      write(`${progressKey}.${playerId}`, payload);
+      return { source: "local", save: payload };
     },
-    getCurrentProgress: () => {
+    getCurrentProgress: async () => {
       const playerId = window.LifeReplayStorage.getPlayerId();
-      return read(`${progressKey}.${playerId}`, null);
+      const save = read(`${progressKey}.${playerId}`, null);
+      return save ? { source: "local", save } : null;
     },
-    clearCurrentProgress: () => {
+    clearCurrentProgress: async () => {
       const playerId = window.LifeReplayStorage.getPlayerId();
       window.localStorage.removeItem(`${progressKey}.${playerId}`);
     }
@@ -355,17 +368,19 @@ function addNotice(text, level = "normal") {
   if (state.effectBuffer) state.effectBuffer.notices.push({ text, level });
 }
 
-function showOutcome(text, effects, after) {
+function showOutcome(text, effects, after, afterKey = "") {
   state.pendingOutcome = { text, effects };
   state.afterOutcome = after;
+  state.afterOutcomeKey = afterKey || afterOutcomeKeyFor(after);
   state.mode = "outcome";
   render();
 }
 
 function continueOutcome() {
-  const after = state.afterOutcome;
+  const after = state.afterOutcome || afterOutcomeForKey(state.afterOutcomeKey);
   state.pendingOutcome = null;
   state.afterOutcome = null;
+  state.afterOutcomeKey = "";
   state.mode = "action";
   if (after) after();
   else render();
@@ -462,30 +477,91 @@ function render() {
 
 function persistCurrentProgress() {
   if (!state || state.mode === "start" || state.mode === "result") return;
-  try {
-    ensureStorageLayer().saveCurrentProgress({
-      turnIndex: state.turnIndex,
-      playerName: state.playerName,
-      childhoodType: state.childhoodType,
-      stage: currentInfo().stage,
-      date: currentInfo().date,
-      stats: {
-        academic: state.academic,
-        skill: state.skill,
-        social: state.social,
-        energy: state.energy,
-        mood: state.mood,
-        money: state.money
-      },
-      relationship: state.relationship,
-      routes: state.routes,
-      cards: state.cards.map((card) => ({ id: card.id, name: card.name, rarity: card.rarity, category: card.category })),
-      choicesLog: state.choicesLog,
-      startedAt: state.startedAt
-    });
-  } catch (error) {
-    console.warn(error);
+  window.clearTimeout(persistTimer);
+  persistTimer = window.setTimeout(() => {
+    ensureStorageLayer().saveCurrentProgress(serializeStateForSave()).catch((error) => console.warn(error));
+  }, 120);
+}
+
+function serializeStateForSave() {
+  const info = currentInfo();
+  const save = {
+    ...state,
+    unlocked: [...state.unlocked],
+    effectBuffer: null,
+    afterOutcome: null,
+    afterOutcomeKey: state.afterOutcomeKey || afterOutcomeKeyFor(state.afterOutcome),
+    stage: info.stage,
+    date: info.date,
+    savedAt: new Date().toISOString()
+  };
+  if (save.mode === "event") {
+    save.pendingEventResume = true;
+    save.pendingEventTitle = state.pendingEvent?.title || "";
+    save.pendingEvent = null;
   }
+  if (save.mode === "examReveal") {
+    save.mode = "action";
+    save.pendingExamReveal = null;
+  }
+  return save;
+}
+
+function restoreStateFromSave(saveData) {
+  const restored = { ...initialState(), ...(saveData || {}) };
+  restored.turnIndex = clamp(Number(restored.turnIndex) || 0, 0, 44);
+  restored.unlocked = new Set(Array.isArray(restored.unlocked) ? restored.unlocked : ["study", "play", "rest"]);
+  restored.hidden = { ...Object.fromEntries(hiddenKeys.map((key) => [key, 0])), ...(restored.hidden || {}) };
+  restored.recentHidden = { ...Object.fromEntries(hiddenKeys.map((key) => [key, 0])), ...(restored.recentHidden || {}) };
+  restored.cards = Array.isArray(restored.cards) ? restored.cards : [];
+  restored.logs = Array.isArray(restored.logs) ? restored.logs : [];
+  restored.routes = Array.isArray(restored.routes) ? restored.routes : [];
+  restored.routeChoices = Array.isArray(restored.routeChoices) ? restored.routeChoices : [];
+  restored.choicesLog = Array.isArray(restored.choicesLog) ? restored.choicesLog : [];
+  restored.boosts = Array.isArray(restored.boosts) ? restored.boosts : [];
+  restored.actionCounts = restored.actionCounts || {};
+  restored.stageActionCounts = restored.stageActionCounts || {};
+  restored.relationship = { crush: false, partner: false, affection: 0, partnerStage: null, ...(restored.relationship || {}) };
+  restored.effectBuffer = null;
+  restored.savedRun = null;
+  restored.saveStatus = "";
+  restored.afterOutcome = afterOutcomeForKey(restored.afterOutcomeKey);
+  if (restored.pendingEventResume || restored.mode === "event") {
+    const previousState = state;
+    state = restored;
+    restored.pendingEvent = !restored.childhoodType && restored.turnIndex === 0 ? childhoodEvent() : fixedEventForTurn() || randomNaturalEvent();
+    state = previousState;
+    restored.mode = "event";
+  }
+  if (restored.mode === "outcome" && !restored.pendingOutcome) restored.mode = "action";
+  if (restored.mode === "examReveal") restored.mode = "action";
+  return restored;
+}
+
+function afterOutcomeKeyFor(after) {
+  if (after === nextTurn) return "nextTurn";
+  if (after === afterMainAction) return "afterMainAction";
+  if (after === render) return "render";
+  return "";
+}
+
+function afterOutcomeForKey(key) {
+  return {
+    nextTurn,
+    afterMainAction,
+    render,
+    action: () => {
+      state.mode = "action";
+      render();
+    }
+  }[key] || null;
+}
+
+function currentSaveData() {
+  const save = availableCurrentSave?.save;
+  if (save?.save_data) return save.save_data;
+  if (save?.turnIndex !== undefined) return save;
+  return availableCurrentSave?.saveData || null;
 }
 
 function displayChapterTitle(info) {
@@ -538,23 +614,62 @@ function renderStart() {
   $("turnLabel").textContent = "0 / 45";
   $("yearLabel").textContent = "幼稚園";
   $("chapterTitle").textContent = "名前を入力";
-  $("message").textContent = "これから、もう一度人生をリプレイします。\n呼ばれたい名前を入れてください。未入力でも、そのまま始められます。";
+  const saveData = currentSaveData();
+  $("message").textContent = saveData
+    ? "途中まで歩いた人生があります。\n続きから遊ぶか、最初から新しい人生を始められます。"
+    : "これから、もう一度人生をリプレイします。\n呼ばれたい名前を入れてください。未入力でも、そのまま始められます。";
   $("stats").innerHTML = statHtml();
-  $("choices").innerHTML = `
+  $("choices").innerHTML = saveData ? `
+    <div class="start-panel">
+      <p>${escapeHtml(saveData.playerName || "あなた")} / ${escapeHtml(saveData.date || "")} / ${Number(saveData.turnIndex || 0) + 1}ターン目</p>
+      <button class="primary-button next-button" id="continueGameButton" type="button">続きから遊ぶ</button>
+      <button class="secondary-button" id="freshStartButton" type="button">最初から始める</button>
+      <button class="secondary-button" id="startHistoryButton" type="button">過去の人生</button>
+      <button class="secondary-button" id="startCatalogButton" type="button">カード図鑑</button>
+    </div>
+  ` : `
     <div class="start-panel">
       <label for="playerNameInput">名前</label>
       <input id="playerNameInput" class="name-input" type="text" maxlength="12" placeholder="あなた" autocomplete="off" />
       <button class="primary-button next-button" id="startGameButton" type="button">はじめる</button>
+      <button class="secondary-button" id="startHistoryButton" type="button">過去の人生</button>
+      <button class="secondary-button" id="startCatalogButton" type="button">カード図鑑</button>
     </div>
   `;
-  $("startGameButton").addEventListener("click", () => {
-    const input = $("playerNameInput").value.trim();
-    state.playerName = input || "あなた";
-    ensureStorageLayer().upsertPlayer(state.playerName).catch((error) => console.warn(error));
-    state.pendingEvent = childhoodEvent();
-    state.mode = "event";
-    render();
-  });
+  if (saveData) {
+    $("continueGameButton").addEventListener("click", continueSavedGame);
+    $("freshStartButton").addEventListener("click", startFreshGameWithConfirm);
+  } else {
+    $("startGameButton").addEventListener("click", startNewGameFromTitle);
+  }
+  $("startHistoryButton").addEventListener("click", showPlayHistory);
+  $("startCatalogButton").addEventListener("click", () => showCardCatalog());
+}
+
+function startNewGameFromTitle() {
+  const input = $("playerNameInput")?.value.trim();
+  state.playerName = input || "あなた";
+  ensureStorageLayer().upsertPlayer(state.playerName).catch((error) => console.warn(error));
+  state.pendingEvent = childhoodEvent();
+  state.mode = "event";
+  render();
+}
+
+async function startFreshGameWithConfirm() {
+  const confirmed = confirm("現在の途中データがあります。\n最初から始めると、進行中のデータは削除されます。\n本当に最初から始めますか？");
+  if (!confirmed) return;
+  await ensureStorageLayer().clearCurrentProgress();
+  availableCurrentSave = null;
+  state = initialState();
+  render();
+}
+
+function continueSavedGame() {
+  const saveData = currentSaveData();
+  if (!saveData) return;
+  state = restoreStateFromSave(saveData);
+  availableCurrentSave = null;
+  render();
 }
 
 function childhoodEvent() {
@@ -1383,7 +1498,7 @@ function resolveEvent(choiceItem) {
     showOutcome(choiceItem.text || `${choiceItem.label}を選んだ。`, effects, () => {
       state.mode = "action";
       render();
-    });
+    }, "action");
     return;
   }
   showOutcome(choiceItem.text || `${choiceItem.label}を選んだ。`, effects, () => {
@@ -1639,7 +1754,7 @@ async function saveCurrentRun(result) {
     const storage = ensureStorageLayer();
     const saved = await storage.savePlayRun(payload);
     state.savedRun = saved.run;
-    storage.clearCurrentProgress?.();
+    await storage.clearCurrentProgress?.();
     state.saveStatus = saved.source === "supabase" ? "この人生をクラウドに記録しました。" : "この人生をこの端末に記録しました。クラウド保存は未接続です。";
   } catch (error) {
     console.warn(error);
@@ -1860,15 +1975,20 @@ function escapeHtml(value) {
 }
 
 function resetGame() {
+  ensureStorageLayer().clearCurrentProgress?.().catch((error) => console.warn(error));
+  availableCurrentSave = null;
   state = initialState();
   render();
 }
 
-function bootstrapPersistence() {
+async function bootstrapPersistence() {
   try {
-    ensureStorageLayer().syncCardCatalog?.(cardCatalog);
+    const storage = ensureStorageLayer();
+    await storage.syncCardCatalog?.(cardCatalog);
+    availableCurrentSave = await storage.getCurrentProgress?.();
   } catch (error) {
     console.warn(error);
+    availableCurrentSave = null;
   }
 }
 
@@ -1882,5 +2002,10 @@ $("modalBackdrop").addEventListener("click", (event) => {
   if (event.target === $("modalBackdrop")) closeModal();
 });
 
-bootstrapPersistence();
-resetGame();
+async function bootstrapApp() {
+  await bootstrapPersistence();
+  state = initialState();
+  render();
+}
+
+bootstrapApp();

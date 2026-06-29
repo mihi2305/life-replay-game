@@ -46,10 +46,22 @@ create table if not exists collected_cards (
   primary key (player_id, card_id)
 );
 
+create table if not exists game_saves (
+  id uuid primary key default gen_random_uuid(),
+  player_id text not null unique,
+  save_data jsonb not null,
+  current_turn integer,
+  current_stage text,
+  current_period text,
+  updated_at timestamptz default now(),
+  created_at timestamptz default now()
+);
+
 alter table players enable row level security;
 alter table play_runs enable row level security;
 alter table card_catalog enable row level security;
 alter table collected_cards enable row level security;
+alter table game_saves enable row level security;
 
 -- 匿名ID方式のため、anon key からの読み書きを許可します。
 -- 厳密なユーザー分離はできません。本番では Supabase Auth を導入し、
@@ -66,6 +78,10 @@ drop policy if exists "anon can update card catalog" on card_catalog;
 drop policy if exists "anon can read collected cards" on collected_cards;
 drop policy if exists "anon can write collected cards" on collected_cards;
 drop policy if exists "anon can update collected cards" on collected_cards;
+drop policy if exists "anon can read game saves" on game_saves;
+drop policy if exists "anon can write game saves" on game_saves;
+drop policy if exists "anon can update game saves" on game_saves;
+drop policy if exists "anon can delete game saves" on game_saves;
 
 create policy "anon can read players" on players for select to anon using (true);
 create policy "anon can write players" on players for insert to anon with check (true);
@@ -82,3 +98,8 @@ create policy "anon can update card catalog" on card_catalog for update to anon 
 create policy "anon can read collected cards" on collected_cards for select to anon using (true);
 create policy "anon can write collected cards" on collected_cards for insert to anon with check (true);
 create policy "anon can update collected cards" on collected_cards for update to anon using (true) with check (true);
+
+create policy "anon can read game saves" on game_saves for select to anon using (true);
+create policy "anon can write game saves" on game_saves for insert to anon with check (true);
+create policy "anon can update game saves" on game_saves for update to anon using (true) with check (true);
+create policy "anon can delete game saves" on game_saves for delete to anon using (true);

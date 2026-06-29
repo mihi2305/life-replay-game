@@ -2,7 +2,7 @@
   const PLAYER_ID_KEY = "lifeReplay.anonymousPlayerId";
   const LOCAL_RUNS_KEY = "lifeReplay.playRuns";
   const LOCAL_CARDS_KEY = "lifeReplay.collectedCards";
-  const CURRENT_PROGRESS_KEY = "lifeReplay.currentProgress";
+  const CURRENT_PROGRESS_KEY = "lifeReplayCurrentSave";
   const CONFIG = window.LIFE_REPLAY_SUPABASE_CONFIG || {};
   const isConfigured = Boolean(CONFIG.url && CONFIG.anonKey);
 
@@ -223,16 +223,65 @@
     return `${CURRENT_PROGRESS_KEY}.${getPlayerId()}`;
   }
 
-  function saveCurrentProgress(progress) {
-    writeJson(currentProgressKey(), { ...progress, updatedAt: new Date().toISOString() });
-    return { source: "local" };
+  async function saveCurrentProgress(progress) {
+    const playerId = getPlayerId();
+    const now = new Date().toISOString();
+    const payload = {
+      player_id: playerId,
+      save_data: progress,
+      current_turn: (progress.turnIndex ?? 0) + 1,
+      current_stage: progress.stage || "",
+      current_period: progress.date || "",
+      updated_at: now
+    };
+
+    if (isConfigured) {
+      try {
+        const rows = await request("game_saves?on_conflict=player_id", {
+          method: "POST",
+          prefer: "resolution=merge-duplicates,return=representation",
+          body: JSON.stringify([payload])
+        });
+        writeJson(currentProgressKey(), { ...payload, savedTo: "supabase" });
+        return { source: "supabase", save: rows?.[0] || payload };
+      } catch (error) {
+        console.warn(error);
+      }
+    }
+
+    writeJson(currentProgressKey(), { ...payload, savedTo: "local" });
+    return { source: "local", save: payload };
   }
 
-  function getCurrentProgress() {
-    return readJson(currentProgressKey(), null);
+  async function getCurrentProgress() {
+    const playerId = getPlayerId();
+    if (isConfigured) {
+      try {
+        const rows = await request(`game_saves?player_id=eq.${encodeURIComponent(playerId)}&select=*&order=updated_at.desc&limit=1`, {
+          method: "GET",
+          prefer: "return=representation"
+        });
+        if (rows?.[0]?.save_data) return { source: "supabase", save: rows[0] };
+      } catch (error) {
+        console.warn(error);
+      }
+    }
+    const local = readJson(currentProgressKey(), null);
+    return local ? { source: "local", save: local } : null;
   }
 
-  function clearCurrentProgress() {
+  async function clearCurrentProgress() {
+    const playerId = getPlayerId();
+    if (isConfigured) {
+      try {
+        await request(`game_saves?player_id=eq.${encodeURIComponent(playerId)}`, {
+          method: "DELETE",
+          prefer: "return=minimal"
+        });
+      } catch (error) {
+        console.warn(error);
+      }
+    }
     localStorage.removeItem(currentProgressKey());
   }
 
