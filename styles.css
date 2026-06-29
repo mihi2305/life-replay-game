@@ -753,6 +753,12 @@ h1 {
   background: var(--paper);
 }
 
+.shop-item.locked-item {
+  opacity: 0.58;
+  background: #f7fafc;
+  border-style: dashed;
+}
+
 .result-title {
   color: var(--blue);
   font-size: 34px;

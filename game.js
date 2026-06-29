@@ -56,14 +56,101 @@ const actions = {
   intern: { label: "インターンをする", desc: "まだ知らない仕事の現場に触れる。", stat: "skill", base: 3, energy: -22, money: 1800, hidden: { 計画志向: 1, 自立志向: 2, 達成志向: 1 } }
 };
 
-const shops = [
-  { name: "栄養ドリンク", price: 500, desc: "体力 +20", buy: () => changeStats({ energy: 20 }) },
-  { name: "参考書", price: 800, desc: "次の勉強効果 +2", buy: () => addBoost("study", 2, 1) },
-  { name: "学力のお守り", price: 1500, desc: "3ターン、勉強効果 +1", buy: () => addBoost("study", 1, 3) },
-  { name: "部活道具", price: 1500, desc: "3ターン、習い事・部活効果 +1", buy: () => addBoost("skill", 1, 3) },
-  { name: "友達とのお菓子", price: 500, desc: "次の遊ぶ効果 +2", buy: () => addBoost("play", 2, 1) },
-  { name: "気分転換セット", price: 1000, desc: "満足度を1段階上げる。3ターンに1回まで", buy: () => improveMoodItem(), cooldown: true }
+const commonShopItemIds = ["energyDrink", "textbook", "studyCharm", "sportsGear", "snackWithFriends", "refreshSet"];
+const routeShopUnlocks = {
+  exam: ["ramune", "luckyPencil", "summaryNotebook", "lateNightSnack"],
+  social: ["manekiNeko", "matchingKeychain", "afterSchoolTicket", "festivalCamera"],
+  sports: ["sportsDrink", "newShoes", "taping", "tournamentCharm"],
+  expression: ["sketchbook", "recorder", "favoriteSticker", "oldNotebook"],
+  abroad: ["vocabularyBook", "passportCase", "overseasSim", "japanGift"],
+  startup: ["laptop", "stickyNotes", "coffeeTicket", "startupInitialFund"]
+};
+const shopItems = [
+  item("energyDrink", "栄養ドリンク", "体力を20回復する。", 500, "common", "common", {}, "anytime", 5, { energy: 20 }),
+  item("textbook", "参考書", "次の「勉強する」の効果が上がる。", 800, "common", "common", {}, "before_action", 3, { activeFlag: "textbookBoost" }),
+  item("studyCharm", "学力のお守り", "3ターンの間、勉強効果が少し上がる。", 1500, "common", "rare", {}, "before_action", 2, { turnFlag: "studyCharmTurns", turns: 3 }),
+  item("sportsGear", "部活道具", "3ターンの間、習い事・部活・専門活動の効果が少し上がる。", 1500, "common", "rare", {}, "before_action", 2, { turnFlag: "sportsGearTurns", turns: 3 }),
+  item("snackWithFriends", "友達とのお菓子", "次の「遊ぶ」の効果が上がる。", 500, "common", "common", {}, "before_action", 4, { activeFlag: "snackBoost" }),
+  item("refreshSet", "気分転換セット", "満足度を1段階上げる。3ターンに1回まで。", 1000, "common", "common", {}, "anytime", 3, { mood: 1, cooldown: true }),
+  item("ramune", "ラムネ", "次の「受験勉強する」で集中しやすくなる。", 600, "exam", "common", { group: "exam" }, "before_action", 5, { activeFlag: "ramuneBoost" }),
+  item("luckyPencil", "勝負鉛筆", "次の模試・受験イベント成功率が少し上がる。", 1000, "exam", "rare", { group: "exam" }, "before_event", 2, { activeFlag: "luckyPencilBoost" }),
+  item("summaryNotebook", "まとめノート", "3ターンの間、勉強効果が少し上がる。", 1800, "exam", "rare", { group: "exam" }, "before_action", 2, { turnFlag: "studyCharmTurns", turns: 3 }),
+  item("lateNightSnack", "夜食セット", "体力を10回復し、次の受験勉強効果が少し上がる。", 700, "exam", "common", { group: "exam" }, "anytime", 3, { energy: 10, activeFlag: "lateNightSnackBoost", moodRisk: true }),
+  item("manekiNeko", "招き猫", "次の友達イベントで良い流れが起きやすくなる。", 1200, "social", "rare", { group: "social" }, "before_event", 2, { activeFlag: "manekiNekoBoost" }),
+  item("matchingKeychain", "おそろいキーホルダー", "次の「遊ぶ」の効果が上がる。", 700, "social", "common", { group: "social" }, "before_action", 4, { activeFlag: "snackBoost" }),
+  item("afterSchoolTicket", "放課後チケット", "3ターンの間、友達・恋愛系イベントが少し起きやすくなる。", 1500, "social", "rare", { group: "social" }, "before_action", 2, { turnFlag: "friendshipEventBoostTurns", turns: 3 }),
+  item("festivalCamera", "文化祭カメラ", "社交性イベントでカード獲得率が少し上がる。", 2000, "social", "rare", { group: "social" }, "before_event", 1, { activeFlag: "festivalCameraBoost" }),
+  item("sportsDrink", "スポーツドリンク", "体力を15回復し、次の部活・スキル系行動が少し伸びる。", 700, "sports", "common", { group: "sports" }, "anytime", 4, { energy: 15, activeFlag: "sportsDrinkBoost" }),
+  item("newShoes", "新しいシューズ", "3ターンの間、部活・スキル系行動効果が少し上がる。", 2500, "sports", "rare", { group: "sports" }, "before_action", 1, { turnFlag: "newShoesTurns", turns: 3 }),
+  item("taping", "テーピング", "体力が低い時の部活失敗を少し防ぐ。", 900, "sports", "common", { group: "sports" }, "before_action", 3, { activeFlag: "tapingProtection" }),
+  item("tournamentCharm", "お守りミサンガ", "大会イベント成功率が少し上がる。", 1800, "sports", "rare", { group: "sports" }, "before_event", 1, { activeFlag: "tournamentCharmBoost" }),
+  item("sketchbook", "スケッチブック", "次の表現活動・制作効果が上がる。", 800, "expression", "common", { group: "expression" }, "before_action", 4, { activeFlag: "sketchbookBoost" }),
+  item("recorder", "小さな録音機", "表現系イベントでカードを得やすくなる。", 1600, "expression", "rare", { group: "expression" }, "before_event", 1, { activeFlag: "recorderCardBoost" }),
+  item("favoriteSticker", "好きなステッカー", "満足度を1段階上げる。3ターンに1回まで。", 500, "expression", "common", { group: "expression" }, "anytime", 3, { mood: 1, cooldown: true }),
+  item("oldNotebook", "古いノート", "探索・自立につながる出来事を少し呼び込みやすくする。", 1200, "expression", "rare", { group: "expression" }, "before_event", 2, { activeFlag: "oldNotebookBoost" }),
+  item("vocabularyBook", "単語帳", "次の語学・留学準備効果が上がる。", 900, "abroad", "common", { group: "abroad" }, "before_action", 4, { activeFlag: "vocabularyBookBoost" }),
+  item("passportCase", "パスポートケース", "留学ルート重要イベントの成功率が少し上がる。", 2000, "abroad", "rare", { group: "abroad" }, "before_event", 1, { activeFlag: "passportCaseBoost" }),
+  item("overseasSim", "海外SIM", "留学中の不安イベントで満足度低下を防ぎやすくする。", 1500, "abroad", "rare", { group: "abroad" }, "before_event", 2, { activeFlag: "overseasSimProtection" }),
+  item("japanGift", "小さな日本のお土産", "現地友人イベントで良い流れが起きやすくなる。", 1000, "abroad", "common", { group: "abroad" }, "before_event", 3, { activeFlag: "japanGiftBoost" }),
+  item("laptop", "ノートPC", "制作・起業準備効果が大きく上がる。", 30000, "startup", "epic", { group: "startup" }, "before_action", 1, { activeFlag: "laptopBoost", expensive: true }),
+  item("stickyNotes", "付箋セット", "次の企画イベント成功率が少し上がる。", 800, "startup", "common", { group: "startup" }, "before_event", 4, { activeFlag: "stickyNotesBoost" }),
+  item("coffeeTicket", "コーヒーチケット", "体力を10回復し、次の制作効果が少し上がる。", 700, "startup", "common", { group: "startup" }, "anytime", 4, { energy: 10, activeFlag: "coffeeTicketBoost" }),
+  item("startupInitialFund", "初期費用", "起業ルートの一部重要選択肢を開放する。", 20000, "startup", "epic", { group: "startup" }, "before_event", 1, { routeFlag: "startupInitialFund", expensive: true })
 ];
+
+function item(id, name, description, price, category, rarity, unlockCondition, usableTiming, maxOwned, effect) {
+  return { id, name, description, price, category, rarity, unlockCondition, usableTiming, maxOwned, effect };
+}
+
+function findShopItem(itemId) {
+  return shopItems.find((shopItem) => shopItem.id === itemId);
+}
+
+function isShopItemUnlocked(itemId) {
+  return commonShopItemIds.includes(itemId) || state.unlockedShopItems.includes(itemId);
+}
+
+function refreshUnlockedShopItems(showNotice = false) {
+  if (!state) return [];
+  const before = new Set(state.unlockedShopItems || []);
+  const groups = unlockedShopGroups();
+  groups.forEach((group) => {
+    (routeShopUnlocks[group] || []).forEach((itemId) => before.add(itemId));
+  });
+  commonShopItemIds.forEach((itemId) => before.add(itemId));
+  const previous = new Set(state.unlockedShopItems || []);
+  state.unlockedShopItems = [...before];
+  const newlyUnlocked = state.unlockedShopItems.filter((itemId) => !previous.has(itemId) && !commonShopItemIds.includes(itemId));
+  if (showNotice && newlyUnlocked.length) {
+    const names = newlyUnlocked.map((itemId) => `「${findShopItem(itemId)?.name || itemId}」`).join(" ");
+    addNotice(`新しいアイテムがショップに追加されました！\n${names}が購入できるようになりました。`, "special");
+    state.routeUnlockedItems.push(...newlyUnlocked.map((itemId) => ({ itemId, turnIndex: state.turnIndex, timestamp: new Date().toISOString() })));
+  }
+  return newlyUnlocked;
+}
+
+function unlockedShopGroups() {
+  const routeText = [...(state.routes || []), ...(state.routeChoices || []), state.universityRouteLabel || "", state.currentUniversityRoute || ""].join(" ");
+  const groups = new Set();
+  if (state.cramSchool || state.unlocked.has("exam") || /受験|進学校|偏差値上位/.test(routeText)) groups.add("exam");
+  if (/人気者|友達|人間関係|サークル|人脈/.test(routeText)) groups.add("social");
+  if (/部活|体育会|スポーツ/.test(routeText) || state.lesson === "サッカー") groups.add("sports");
+  if (/表現|個性|特色|専門|研究/.test(routeText) || ["ピアノ", "プログラミング"].includes(state.lesson)) groups.add("expression");
+  if (/留学|語学|study_abroad/.test(routeText) || state.currentUniversityRoute === "study_abroad") groups.add("abroad");
+  if (/起業|プロジェクト|制作|startup/.test(routeText) || state.currentUniversityRoute === "startup") groups.add("startup");
+  return groups;
+}
+
+function unlockHintForItem(shopItem) {
+  return {
+    exam: "受験・進学校ルートに入ると解放",
+    social: "友達・人間関係ルートに入ると解放",
+    sports: "部活・体育会ルートに入ると解放",
+    expression: "表現・専門探究ルートに入ると解放",
+    abroad: "留学・語学ルートに入ると解放",
+    startup: "起業・プロジェクトルートに入ると解放"
+  }[shopItem.category] || "特定のルートに入ると解放";
+}
 
 const typeDefs = [
   ["冒険家タイプ", "挑戦志向", "探索志向", "知らない景色に足を向けられる人。失敗も寄り道も、次の物語の材料に変えられます。"],
@@ -108,6 +195,12 @@ function initialState() {
     stageActionCounts: {},
     routeChoices: [],
     unlocked: new Set(["study", "play", "rest"]),
+    inventory: Object.fromEntries(shopItems.map((shopItem) => [shopItem.id, 0])),
+    activeEffects: initialActiveEffects(),
+    unlockedShopItems: [...commonShopItemIds],
+    routeUnlockedItems: [],
+    itemUseHistory: [],
+    routeFlags: {},
     hidden: Object.fromEntries(hiddenKeys.map((key) => [key, 0])),
     recentHidden: Object.fromEntries(hiddenKeys.map((key) => [key, 0])),
     boosts: [],
@@ -122,6 +215,35 @@ function initialState() {
     effectBuffer: null,
     lastMoodItemTurn: -99,
     lastStage: "小学校"
+  };
+}
+
+function initialActiveEffects() {
+  return {
+    textbookBoost: false,
+    snackBoost: false,
+    studyCharmTurns: 0,
+    sportsGearTurns: 0,
+    ramuneBoost: false,
+    luckyPencilBoost: false,
+    lateNightSnackBoost: false,
+    manekiNekoBoost: false,
+    friendshipEventBoostTurns: 0,
+    festivalCameraBoost: false,
+    sportsDrinkBoost: false,
+    newShoesTurns: 0,
+    tapingProtection: false,
+    tournamentCharmBoost: false,
+    sketchbookBoost: false,
+    recorderCardBoost: false,
+    vocabularyBookBoost: false,
+    passportCaseBoost: false,
+    overseasSimProtection: false,
+    japanGiftBoost: false,
+    laptopBoost: false,
+    stickyNotesBoost: false,
+    coffeeTicketBoost: false,
+    oldNotebookBoost: false
   };
 }
 
@@ -406,13 +528,44 @@ function boostFor(actionKey, action) {
     if (boost.kind === "skill" && (action.stat === "skill" || action.secondStat === "skill")) total += boost.amount;
     if (boost.kind === "play" && action.stat === "social") total += boost.amount;
   });
+  total += activeEffectBoostFor(actionKey, action);
   return total;
 }
 
-function addBoost(kind, amount, turns) {
-  state.boosts.push({ kind, amount, turns });
-  const labels = { study: "次の勉強効果が強化された！", skill: "習い事・部活の効果が強化された！", play: "次の遊ぶ効果が強化された！" };
-  addNotice(labels[kind] || "次の行動効果が強化された！", "strong");
+function activeEffectBoostFor(actionKey, action) {
+  const effects = state.activeEffects || {};
+  let total = 0;
+  if (actionKey === "study" && effects.textbookBoost) total += 2;
+  if (actionKey === "study" && effects.studyCharmTurns > 0) total += 1;
+  if (actionKey === "exam" && effects.ramuneBoost) total += 2;
+  if (actionKey === "exam" && effects.lateNightSnackBoost) total += 1;
+  if (actionKey === "exam" && effects.studyCharmTurns > 0) total += 1;
+  if (actionKey === "play" && effects.snackBoost) total += 2;
+  if (["lesson", "club", "deepen", "expression", "create"].includes(actionKey) && effects.sportsGearTurns > 0) total += 1;
+  if (["club", "lesson", "deepen"].includes(actionKey) && effects.sportsDrinkBoost) total += 1;
+  if (["club", "lesson", "deepen"].includes(actionKey) && effects.newShoesTurns > 0) total += 1;
+  if (["expression", "create"].includes(actionKey) && effects.sketchbookBoost) total += 2;
+  if (["language", "abroad"].includes(actionKey) && effects.vocabularyBookBoost) total += 2;
+  if (["create", "startup"].includes(actionKey) && effects.laptopBoost) total += 2;
+  if (["create", "startup"].includes(actionKey) && effects.coffeeTicketBoost) total += 1;
+  return Math.min(total, 4);
+}
+
+function consumeActiveEffectsForAction(actionKey) {
+  const effects = state.activeEffects || {};
+  if (actionKey === "study") effects.textbookBoost = false;
+  if (actionKey === "exam") {
+    effects.ramuneBoost = false;
+    effects.lateNightSnackBoost = false;
+  }
+  if (actionKey === "play") effects.snackBoost = false;
+  if (["club", "lesson", "deepen"].includes(actionKey)) effects.sportsDrinkBoost = false;
+  if (["expression", "create"].includes(actionKey)) effects.sketchbookBoost = false;
+  if (["language", "abroad"].includes(actionKey)) effects.vocabularyBookBoost = false;
+  if (["create", "startup"].includes(actionKey)) {
+    effects.laptopBoost = false;
+    effects.coffeeTicketBoost = false;
+  }
 }
 
 function improveMoodItem() {
@@ -471,8 +624,17 @@ function render() {
   $("stats").innerHTML = statHtml();
   $("logList").innerHTML = state.logs.map((item) => `<div class="log-item">${escapeHtml(item)}</div>`).join("");
   $("latestCards").innerHTML = state.cards.slice(-4).map(cardHtml).join("") || `<div class="log-item">まだカードはありません。</div>`;
+  updateAuxiliaryButtons();
   renderMain();
   persistCurrentProgress();
+}
+
+function updateAuxiliaryButtons() {
+  const inGame = !["start", "result"].includes(state.mode);
+  $("shopButton").classList.toggle("hidden", !inGame);
+  $("inventoryButton").classList.toggle("hidden", !inGame);
+  $("resetButton").classList.add("hidden");
+  $("albumButton").classList.toggle("hidden", state.mode === "start");
 }
 
 function persistCurrentProgress() {
@@ -519,6 +681,12 @@ function restoreStateFromSave(saveData) {
   restored.routeChoices = Array.isArray(restored.routeChoices) ? restored.routeChoices : [];
   restored.choicesLog = Array.isArray(restored.choicesLog) ? restored.choicesLog : [];
   restored.boosts = Array.isArray(restored.boosts) ? restored.boosts : [];
+  restored.inventory = { ...Object.fromEntries(shopItems.map((shopItem) => [shopItem.id, 0])), ...(restored.inventory || {}) };
+  restored.activeEffects = { ...initialActiveEffects(), ...(restored.activeEffects || {}) };
+  restored.unlockedShopItems = Array.from(new Set([...(restored.unlockedShopItems || []), ...commonShopItemIds]));
+  restored.routeUnlockedItems = Array.isArray(restored.routeUnlockedItems) ? restored.routeUnlockedItems : [];
+  restored.itemUseHistory = Array.isArray(restored.itemUseHistory) ? restored.itemUseHistory : [];
+  restored.routeFlags = restored.routeFlags || {};
   restored.actionCounts = restored.actionCounts || {};
   restored.stageActionCounts = restored.stageActionCounts || {};
   restored.relationship = { crush: false, partner: false, affection: 0, partnerStage: null, ...(restored.relationship || {}) };
@@ -795,7 +963,8 @@ function universityActionKeys() {
 function doAction(key) {
   const action = actions[key];
   recordAction(key);
-  if (state.energy < 20 && key !== "rest") {
+  const protectedLowEnergy = (key === "exam" && state.activeEffects.ramuneBoost) || (["club", "lesson"].includes(key) && state.activeEffects.tapingProtection);
+  if (state.energy < 20 && key !== "rest" && !protectedLowEnergy) {
     startEffectCapture();
     changeStats({ energy: 12, mood: Math.max(0, state.mood - 1) });
     addHidden({ 安定志向: 1 });
@@ -814,6 +983,7 @@ function doAction(key) {
   if (key === "lesson") applyLessonFlavor(delta);
   changeStats(delta);
   addHidden(action.hidden);
+  consumeActiveEffectsForAction(key);
   log(`${action.label}を選んだ。`);
   tickBoosts();
   maybeMilestoneCard(key);
@@ -879,6 +1049,9 @@ function statName(key) {
 function tickBoosts() {
   state.boosts.forEach((boost) => boost.turns -= 1);
   state.boosts = state.boosts.filter((boost) => boost.turns > 0);
+  ["studyCharmTurns", "sportsGearTurns", "friendshipEventBoostTurns", "newShoesTurns"].forEach((key) => {
+    if (state.activeEffects[key] > 0) state.activeEffects[key] -= 1;
+  });
 }
 
 function afterMainAction() {
@@ -900,7 +1073,10 @@ function afterMainAction() {
 
 function naturalEventRate() {
   if (state.turnIndex >= 42) return 1;
-  return 0.72;
+  let rate = 0.72;
+  if (state.activeEffects.friendshipEventBoostTurns > 0) rate += 0.08;
+  if (state.activeEffects.oldNotebookBoost) rate += 0.05;
+  return Math.min(0.88, rate);
 }
 
 function fixedEventForTurn() {
@@ -1046,6 +1222,8 @@ function examChance() {
   if (state.cramSchool) chance += 10;
   if (state.energy < 25) chance -= 15;
   if (state.hidden["計画志向"] >= 12) chance += 5;
+  if (state.activeEffects.luckyPencilBoost) chance += 5;
+  if (state.activeEffects.passportCaseBoost && currentInfo().stage === "大学") chance += 5;
   if (state.mood === 0) chance -= 10;
   return clamp(chance, 5, 95);
 }
@@ -1489,6 +1667,7 @@ function resolveEvent(choiceItem) {
   }
   startEffectCapture();
   const result = choiceItem.apply();
+  refreshUnlockedShopItems(true);
   const effects = finishEffectCapture();
   if (result === false) return render();
   log(`選択：${choiceItem.label}`);
@@ -1534,6 +1713,10 @@ function renderExamReveal() {
           reveal.phase = "result";
           startEffectCapture();
           reveal.apply();
+          refreshUnlockedShopItems(true);
+          state.activeEffects.luckyPencilBoost = false;
+          state.activeEffects.passportCaseBoost = false;
+          state.activeEffects.tournamentCharmBoost = false;
           reveal.effects = finishEffectCapture();
           recordChoiceEntry({ label: reveal.success ? "結果を見る：合格" : "結果を見る：届かなかった", actionKey: "exam_result", choiceText: reveal.success ? reveal.successText : reveal.failureText, effects: reveal.effects });
           render();
@@ -1603,35 +1786,121 @@ function renderChance() {
 
 function openShop() {
   $("modalTitle").textContent = "ショップ";
-  $("modalBody").innerHTML = `<p>所持金：${state.money.toLocaleString()}G</p><div class="shop-grid">${shops.map((item, index) => `
-    <div class="shop-item">
-      <strong>${item.name}</strong>
-      <span>${item.desc}</span>
-      <span>${item.price.toLocaleString()}G</span>
-      <button class="primary-button" type="button" data-shop="${index}" ${state.money < item.price ? "disabled" : ""}>購入</button>
-    </div>`).join("")}</div>`;
+  refreshUnlockedShopItems();
+  const visibleItems = shopItems.filter((shopItem) => isShopItemUnlocked(shopItem.id));
+  const lockedItems = shopItems.filter((shopItem) => !isShopItemUnlocked(shopItem.id));
+  $("modalBody").innerHTML = `
+    <p>所持金：${state.money.toLocaleString()}G</p>
+    <div class="shop-grid">
+      ${visibleItems.map(shopItemHtml).join("")}
+      ${lockedItems.map(lockedShopItemHtml).join("")}
+    </div>`;
   showModal();
   document.querySelectorAll("[data-shop]").forEach((button) => {
-    button.addEventListener("click", () => buyItem(Number(button.dataset.shop)));
+    button.addEventListener("click", () => buyItem(button.dataset.shop));
   });
 }
 
-function buyItem(index) {
-  const item = shops[index];
-  if (state.money < item.price) return;
-  if (item.price >= 1500 && state.money < 32000 && !confirm("この買い物をすると、大学以降の選択肢が狭まるかもしれません。本当に購入しますか？")) return;
+function shopItemHtml(shopItem) {
+  const owned = state.inventory[shopItem.id] || 0;
+  const maxed = owned >= shopItem.maxOwned;
+  return `
+    <div class="shop-item">
+      <strong>${escapeHtml(shopItem.name)}</strong>
+      <span>${escapeHtml(shopItem.description)}</span>
+      <span>${shopItem.price.toLocaleString()}G / 所持 ${owned}/${shopItem.maxOwned}</span>
+      <button class="primary-button" type="button" data-shop="${shopItem.id}" ${state.money < shopItem.price || maxed ? "disabled" : ""}>購入</button>
+    </div>`;
+}
+
+function lockedShopItemHtml(shopItem) {
+  return `
+    <div class="shop-item locked-item">
+      <strong>？？？</strong>
+      <span>${escapeHtml(unlockHintForItem(shopItem))}</span>
+      <span>未解放</span>
+      <button class="secondary-button" type="button" disabled>購入不可</button>
+    </div>`;
+}
+
+function buyItem(itemId) {
+  const itemData = findShopItem(itemId);
+  if (!itemData || !isShopItemUnlocked(itemId)) return;
+  if (state.money < itemData.price) return;
+  if ((itemData.effect.expensive || itemData.price >= 15000) && !confirm("高額な買い物です。今後の選択肢が狭まるかもしれません。本当に購入しますか？")) return;
   startEffectCapture();
-  const ok = item.buy();
+  changeStats({ money: -itemData.price });
+  state.inventory[itemId] = (state.inventory[itemId] || 0) + 1;
+  state.itemUseHistory.push({ type: "buy", itemId, turnIndex: state.turnIndex, timestamp: new Date().toISOString() });
+  log(`${itemData.name}を購入した。持ち物に追加された。`);
+  closeModal();
+  showOutcome(`${itemData.name}を購入した！\n持ち物に追加されました。`, finishEffectCapture(), render, "render");
+}
+
+function openInventory() {
+  const ownedItems = shopItems.filter((shopItem) => (state.inventory[shopItem.id] || 0) > 0);
+  $("modalTitle").textContent = "持ち物";
+  $("modalBody").innerHTML = ownedItems.length ? `
+    <div class="shop-grid">${ownedItems.map(inventoryItemHtml).join("")}</div>
+  ` : `<p>持ち物はまだありません。ショップで購入したアイテムがここに並びます。</p>`;
+  showModal();
+  document.querySelectorAll("[data-use-item]").forEach((button) => {
+    button.addEventListener("click", () => useInventoryItem(button.dataset.useItem));
+  });
+}
+
+function inventoryItemHtml(shopItem) {
+  return `
+    <div class="shop-item">
+      <strong>${escapeHtml(shopItem.name)} ×${state.inventory[shopItem.id] || 0}</strong>
+      <span>${escapeHtml(shopItem.description)}</span>
+      <button class="primary-button" type="button" data-use-item="${shopItem.id}">使う</button>
+    </div>`;
+}
+
+function useInventoryItem(itemId) {
+  const itemData = findShopItem(itemId);
+  if (!itemData || (state.inventory[itemId] || 0) <= 0) return;
+  startEffectCapture();
+  const ok = applyItemEffect(itemData);
   if (ok === false) {
     finishEffectCapture();
-    render();
-    openShop();
+    openInventory();
     return;
   }
-  changeStats({ money: -item.price });
-  log(`${item.name}を購入した。`);
+  state.inventory[itemId] -= 1;
+  state.itemUseHistory.push({ type: "use", itemId, turnIndex: state.turnIndex, timestamp: new Date().toISOString() });
+  log(`${itemData.name}を使った。`);
   closeModal();
-  showOutcome(`${item.name}を使った！`, finishEffectCapture(), render);
+  showOutcome(`${itemData.name}を使った！\n${itemUseMessage(itemData)}`, finishEffectCapture(), render, "render");
+}
+
+function applyItemEffect(itemData) {
+  const effect = itemData.effect || {};
+  if (effect.cooldown && state.turnIndex - state.lastMoodItemTurn < 3) {
+    log(`${itemData.name}はまだ続けて使えない。`);
+    return false;
+  }
+  if (effect.energy) changeStats({ energy: effect.energy });
+  if (effect.mood) {
+    state.lastMoodItemTurn = state.turnIndex;
+    changeStats({ mood: Math.min(4, state.mood + effect.mood) });
+  }
+  if (effect.moodRisk && state.mood <= 1 && Math.random() < 0.35) changeStats({ mood: Math.max(0, state.mood - 1) });
+  if (effect.activeFlag) state.activeEffects[effect.activeFlag] = true;
+  if (effect.turnFlag) state.activeEffects[effect.turnFlag] = Math.max(state.activeEffects[effect.turnFlag] || 0, effect.turns || 1);
+  if (effect.routeFlag) state.routeFlags[effect.routeFlag] = true;
+  return true;
+}
+
+function itemUseMessage(itemData) {
+  const effect = itemData.effect || {};
+  if (effect.energy && effect.activeFlag) return "体力が回復し、次の行動が少し伸びやすくなります。";
+  if (effect.energy) return `体力が +${effect.energy} 回復した！`;
+  if (effect.mood) return "気持ちが少し整いました。";
+  if (effect.turnFlag) return "しばらくの間、関連する行動が少し伸びやすくなります。";
+  if (effect.routeFlag) return "新しい準備が整いました。";
+  return "次の関連する行動やイベントで良い流れが起きやすくなります。";
 }
 
 function showAlbum() {
@@ -1993,6 +2262,7 @@ async function bootstrapPersistence() {
 }
 
 $("shopButton").addEventListener("click", openShop);
+$("inventoryButton").addEventListener("click", openInventory);
 $("albumButton").addEventListener("click", showAlbum);
 $("historyButton").addEventListener("click", showPlayHistory);
 $("catalogButton").addEventListener("click", () => showCardCatalog());
