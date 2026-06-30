@@ -20,6 +20,8 @@
         </div>
       </section>
 
+      <section id="topStatusBar" class="top-status-bar" aria-label="進行状況"></section>
+
       <section class="game-grid">
         <aside class="panel status-panel">
           <div class="month-card">
@@ -27,40 +29,32 @@
             <strong id="chapterTitle">入学式</strong>
           </div>
           <div class="stats" id="stats"></div>
-          <button class="ghost-button" id="albumButton" type="button">人生アルバム</button>
-          <button class="ghost-button" id="historyButton" type="button">過去の人生</button>
-          <button class="ghost-button" id="catalogButton" type="button">カード図鑑</button>
+          <div class="sub-menu-bar">
+            <button class="sub-menu-button" id="logButton" type="button">ログ</button>
+            <button class="sub-menu-button" id="catalogButton" type="button">図鑑</button>
+            <button class="sub-menu-button" id="albumButton" type="button">アルバム</button>
+            <button class="sub-menu-button" id="settingsButton" type="button">設定</button>
+          </div>
         </aside>
 
         <section class="panel play-panel">
-          <div class="scene-art" aria-hidden="true">
-            <svg viewBox="0 0 620 190" role="img">
-              <defs>
-                <linearGradient id="sky" x1="0" y1="0" x2="1" y2="1">
-                  <stop offset="0" stop-color="#d7f1ff" />
-                  <stop offset="1" stop-color="#fff0c7" />
-                </linearGradient>
-              </defs>
-              <rect width="620" height="190" rx="16" fill="url(#sky)" />
-              <circle cx="514" cy="45" r="24" fill="#ffd36b" />
-              <path d="M0 143 C94 104 174 177 276 132 C394 80 488 141 620 99 L620 190 L0 190Z" fill="#7ac7a1" />
-              <path d="M0 160 C100 131 189 188 298 154 C407 119 515 161 620 135 L620 190 L0 190Z" fill="#f2cf79" />
-              <path d="M84 126 h72 v47 h-72z" fill="#fff7e1" />
-              <path d="M75 126 l45 -34 l45 34z" fill="#e8795d" />
-              <rect x="105" y="140" width="19" height="33" fill="#6b7b90" />
-              <path d="M402 111 q33 -47 66 0 v62 h-66z" fill="#9dc0ff" />
-              <path d="M428 173 v-42 h18 v42" fill="#526179" />
-              <circle cx="259" cy="137" r="13" fill="#31536d" />
-              <path d="M259 150 v30 M241 164 h36 M251 180 l-15 10 M267 180 l15 10" stroke="#31536d" stroke-width="7" stroke-linecap="round" />
-            </svg>
+          <div id="stageView" class="stage-view school-elementary">
+            <div class="stage-sky" aria-hidden="true"></div>
+            <div class="character-stage">
+              <div id="characterAvatar" class="character-sprite character-placeholder" aria-hidden="true">🙂</div>
+              <div>
+                <p class="character-name-label">主人公</p>
+                <strong id="characterName">あなた</strong>
+              </div>
+            </div>
           </div>
           <div id="message" class="message"></div>
           <div id="chanceBox" class="chance-box hidden"></div>
           <div id="choices" class="choice-list"></div>
-          <div class="action-footer">
-            <button id="shopButton" class="secondary-button" type="button">ショップ</button>
-            <button id="inventoryButton" class="secondary-button" type="button">持ち物</button>
-            <button id="resetButton" class="secondary-button" type="button">もう一度</button>
+          <div class="action-footer main-tool-grid">
+            <button id="shopButton" class="tool-action-button" type="button"><span>🛒</span>ショップ</button>
+            <button id="inventoryButton" class="tool-action-button" type="button"><span>🎒</span>持ち物</button>
+            <button id="resetButton" class="tool-action-button" type="button"><span>🔁</span>もう一度</button>
           </div>
         </section>
 

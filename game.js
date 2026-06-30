@@ -714,6 +714,8 @@ function render() {
   $("yearLabel").textContent = info.date;
   $("chapterTitle").textContent = displayChapterTitle(info);
   $("stats").innerHTML = statHtml();
+  renderTopStatusBar(info);
+  renderStageView(info);
   $("logList").innerHTML = state.logs.map((item) => `<div class="log-item">${escapeHtml(item)}</div>`).join("");
   $("latestCards").innerHTML = state.cards.slice(-4).map(cardHtml).join("") || `<div class="log-item">まだカードはありません。</div>`;
   updateAuxiliaryButtons();
@@ -727,6 +729,9 @@ function updateAuxiliaryButtons() {
   $("inventoryButton").classList.toggle("hidden", !inGame);
   $("resetButton").classList.add("hidden");
   $("albumButton").classList.toggle("hidden", state.mode === "start");
+  $("logButton").classList.toggle("hidden", state.mode === "start");
+  $("catalogButton").classList.toggle("hidden", state.mode === "start");
+  $("settingsButton").classList.toggle("hidden", state.mode === "start");
 }
 
 function persistCurrentProgress() {
@@ -842,6 +847,52 @@ function displayChapterTitle(info) {
   return info.title;
 }
 
+function stageClassName(stage) {
+  return {
+    小学校: "school-elementary",
+    中学校: "school-junior",
+    高校: "school-high",
+    大学: "university",
+    社会に出る前: "office"
+  }[stage] || "school-elementary";
+}
+
+function stageAvatar(stage) {
+  return {
+    小学校: "🎒",
+    中学校: "⚽",
+    高校: "📚",
+    大学: "🌱",
+    社会に出る前: "🚪"
+  }[stage] || "🙂";
+}
+
+function staminaTone(value) {
+  if (value < 25) return "low";
+  if (value < 55) return "mid";
+  return "high";
+}
+
+function renderTopStatusBar(info) {
+  const remaining = Math.max(0, timeline.length - info.turn);
+  $("topStatusBar").innerHTML = `
+    <div class="top-status-item"><span>ステージ</span><strong>${escapeHtml(info.stage)}</strong></div>
+    <div class="top-status-item"><span>時期</span><strong>${escapeHtml(info.date)}</strong></div>
+    <div class="top-status-item"><span>残り</span><strong>${remaining}ターン</strong></div>
+    <div class="top-status-item stamina-item">
+      <span>体力</span>
+      <div class="stamina-gauge ${staminaTone(state.energy)}"><i style="width:${state.energy}%"></i></div>
+      <strong>${state.energy}/100</strong>
+    </div>
+  `;
+}
+
+function renderStageView(info) {
+  $("stageView").className = `stage-view ${stageClassName(info.stage)}`;
+  $("characterAvatar").textContent = stageAvatar(info.stage);
+  $("characterName").textContent = state.playerName || "あなた";
+}
+
 function statHtml() {
   const rows = [
     ["学力", "academic"], ["スキル", "skill"], ["社交性", "social"]
@@ -851,14 +902,11 @@ function statHtml() {
       <div class="bar"><span style="width:${state[key]}%"></span></div>
       <span class="rank-badge rank-${rank(state[key]).toLowerCase()}">${rank(state[key])} ${state[key]}</span>
     </div>`).join("");
-  return `${rows}
-    <div class="stat-row">
-      <strong>体力</strong>
-      <div class="bar vital"><span style="width:${state.energy}%"></span></div>
-      <span>${state.energy}/100</span>
-    </div>
+  return `<div class="player-status-name"><span>プレイヤー</span><strong>${escapeHtml(state.playerName || "あなた")}</strong></div>
+    ${rows}
     <div class="mood">満足度：${moodLevels[state.mood]}</div>
-    <div class="money">お金：${state.money.toLocaleString()}G</div>`;
+    <div class="money">お金：${state.money.toLocaleString()}G</div>
+    <div class="compact-energy">体力 ${state.energy}/100</div>`;
 }
 
 function renderMain() {
@@ -873,15 +921,43 @@ function renderMain() {
   if (state.mode === "result") return renderResult();
   const routeNotice = routeStatusText();
   $("message").textContent = `${info.date}\n${monthPrompt(info)}${routeNotice}`;
+  $("choices").classList.add("main-action-grid");
   $("choices").innerHTML = availableActions().map(([key, action]) => `
-    <button class="choice-button" type="button" data-action="${key}">
-      ${action.label}<small>${action.desc}</small>
+    <button class="choice-button action-choice-button sim-action-button" type="button" data-action="${key}">
+      <span class="action-icon">${actionIcon(key)}</span>
+      <span>${actionShortLabel(key, action.label)}</span>
+      <small>${action.desc}</small>
     </button>
   `).join("");
   document.querySelectorAll("[data-action]").forEach((button) => {
     button.addEventListener("click", () => doAction(button.dataset.action));
   });
   renderChance();
+}
+
+function actionIcon(key) {
+  return {
+    study: "📚",
+    rest: "🛏️",
+    lesson: state.lesson === "サッカー" ? "⚽" : "📘",
+    play: "🎮",
+    exam: "✏️",
+    club: "⚽",
+    expression: "🎨",
+    language: "📘",
+    create: "🛠️",
+    deepen: "🔎",
+    romance: "💌",
+    work: "💼",
+    abroad: "✈️",
+    startup: "🚀",
+    intern: "🏢"
+  }[key] || "✨";
+}
+
+function actionShortLabel(key, label) {
+  if (key === "lesson") return "習い事";
+  return label.replace("する", "");
 }
 
 function renderStageTransition() {
@@ -1117,6 +1193,10 @@ function universityActionKeys() {
 }
 
 function doAction(key) {
+  if (key === "lesson") {
+    showLessonPicker();
+    return;
+  }
   const action = actions[key];
   const displayAction = actionForDisplay(key);
   recordAction(key);
@@ -1174,6 +1254,62 @@ function doAction(key) {
   const outcomeText = `${actionResultText(key)}${extraOutcomeText}`;
   recordChoiceEntry({ label: displayAction.label, actionKey: key, choiceText: outcomeText, effects });
   showOutcome(outcomeText, effects, afterMainAction);
+}
+
+function showLessonPicker() {
+  $("modalTitle").textContent = "習い事を選ぶ";
+  $("modalBody").innerHTML = `
+    <div class="lesson-picker">
+      <button class="lesson-option soccer" type="button" data-lesson-choice="soccer">
+        <span>⚽</span>
+        <strong>サッカー</strong>
+        <small>スキルが大きく上がり、満足度も少し上がる。体力は減る。</small>
+      </button>
+      <button class="lesson-option english" type="button" data-lesson-choice="english">
+        <span>📘</span>
+        <strong>英語</strong>
+        <small>学力が少し上がり、スキルも伸びる。体力は少し減る。</small>
+      </button>
+    </div>
+  `;
+  showModal();
+  document.querySelectorAll("[data-lesson-choice]").forEach((button) => {
+    button.addEventListener("click", () => {
+      closeModal();
+      doLessonAction(button.dataset.lessonChoice);
+    });
+  });
+}
+
+function doLessonAction(kind) {
+  const label = kind === "soccer" ? "サッカー" : "英語";
+  recordAction("lesson");
+  startEffectCapture();
+  if (kind === "soccer") {
+    state.lesson = "サッカー";
+    state.lessonStatus = state.lessonStatus === "club" ? "club" : "active";
+    state.soccerExperience = true;
+    leanRoute("club", 1);
+    changeStats({ skill: 5, energy: -18, mood: Math.min(4, state.mood + 1), cap: 7 });
+    addHidden({ 達成志向: 1, 挑戦志向: 1 });
+  } else {
+    state.lesson = "英会話";
+    state.lessonStatus = "active";
+    state.englishExperience = true;
+    leanRoute("academic", 1);
+    changeStats({ academic: 2, skill: 4, energy: -12, cap: 6 });
+    addHidden({ 探索志向: 1, 計画志向: 1 });
+  }
+  state.unlocked.add("lesson");
+  maybeMilestoneCard("lesson");
+  const effects = finishEffectCapture();
+  const text = kind === "soccer"
+    ? "サッカーの練習に取り組んだ。\n体は疲れたけれど、ボールに触れるたびに少し自信が戻ってきた。"
+    : "英語の習い事に取り組んだ。\n言葉を覚えるだけでなく、自分の考えを伝える練習にもなった。";
+  log(`${label}を選んだ。`);
+  tickBoosts();
+  recordChoiceEntry({ label, actionKey: "lesson", choiceText: text, effects });
+  showOutcome(text, effects, afterMainAction);
 }
 
 function shouldTriggerHospitalEvent(key, action, delta) {
@@ -2524,35 +2660,15 @@ function renderEvent() {
   }
   const eventType = eventTypeFor(event);
   const dialogue = Array.isArray(event.dialogue) ? event.dialogue : [];
-  if (dialogue.length && state.eventDialogueIndex < dialogue.length) {
-    const line = dialogue[state.eventDialogueIndex];
-    $("message").textContent = event.title;
-    $("choices").className = `choices event-stage event-${eventType}`;
-    $("choices").innerHTML = `
-      <div class="event-panel event-${eventType}">
-        <p class="event-kicker">${escapeHtml(eventHeading(eventType))}</p>
-        <div class="dialogue-line">
-          <strong>${escapeHtml(line.speaker || "")}</strong>
-          <p>${escapeHtml(line.text || "")}</p>
-        </div>
-        <button class="primary-button next-button" id="nextDialogue" type="button">${state.eventDialogueIndex + 1 >= dialogue.length ? "選択する" : "次へ"}</button>
-      </div>
-    `;
-    $("nextDialogue").addEventListener("click", () => {
-      state.eventDialogueIndex += 1;
-      render();
-    });
-    return;
-  }
   const displayChoices = shuffle(event.choices);
-  $("message").textContent = event.title;
+  $("message").innerHTML = dialogue.length ? `${dialogueLogHtml(dialogue)}<p class="dialogue-prompt">${escapeHtml(event.title || "どうする？")}</p>` : escapeHtml(event.title);
   $("choices").className = `choices event-stage event-${eventType}`;
   $("choices").innerHTML = `
     <div class="event-panel event-${eventType}">
       <p class="event-kicker">${escapeHtml(eventHeading(eventType))}</p>
       <div class="event-choice-list">
         ${displayChoices.map((choiceItem, index) => `
-          <button class="choice-button ${choiceItem.locked ? "locked" : ""}" type="button" data-choice="${index}" ${choiceItem.locked ? "disabled" : ""}>
+          <button class="choice-button event-choice-button ${choiceItem.locked ? "locked" : ""}" type="button" data-choice="${index}" ${choiceItem.locked ? "disabled" : ""}>
             ${choiceItem.label}${choiceItem.locked ? "<small>まだ選べません</small>" : ""}
           </button>
         `).join("")}
@@ -2562,6 +2678,16 @@ function renderEvent() {
   document.querySelectorAll("[data-choice]").forEach((button) => {
     button.addEventListener("click", () => resolveEvent(displayChoices[Number(button.dataset.choice)]));
   });
+}
+
+function dialogueLogHtml(dialogue) {
+  return `
+    <div class="dialogue-log">
+      ${dialogue.map((line) => `
+        <p>${line.speaker ? `<strong>${escapeHtml(line.speaker)}：</strong>` : ""}${escapeHtml(line.text || "")}</p>
+      `).join("")}
+    </div>
+  `;
 }
 
 function eventTypeFor(eventObject) {
@@ -2857,6 +2983,28 @@ function showAlbum() {
     ? `<p>収集率：${collection.acquired} / ${collection.total}（${collection.rate}%）</p><div class="card-grid">${state.cards.map(cardHtml).join("")}${unknownCards.map(cardHtml).join("")}</div>`
     : `<p>まだカードはありません。</p>`;
   showModal();
+}
+
+function showEventLogModal() {
+  $("modalTitle").textContent = "イベントログ";
+  $("modalBody").innerHTML = `
+    <div class="event-log-panel">
+      ${state.logs.map((item) => `<div class="log-item">${escapeHtml(item)}</div>`).join("") || "<p>まだログはありません。</p>"}
+    </div>
+  `;
+  showModal();
+}
+
+function showSettingsModal() {
+  $("modalTitle").textContent = "設定";
+  $("modalBody").innerHTML = `
+    <div class="settings-panel">
+      <p>ゲームの記録や周回の確認を行えます。</p>
+      <button class="primary-button" id="settingsHistoryButton" type="button">過去の人生を見る</button>
+    </div>
+  `;
+  showModal();
+  $("settingsHistoryButton").addEventListener("click", showPlayHistory);
 }
 
 function collectionStats(collectedMap) {
@@ -3239,8 +3387,9 @@ async function bootstrapPersistence() {
 $("shopButton").addEventListener("click", openShop);
 $("inventoryButton").addEventListener("click", openInventory);
 $("albumButton").addEventListener("click", showAlbum);
-$("historyButton").addEventListener("click", showPlayHistory);
 $("catalogButton").addEventListener("click", () => showCardCatalog());
+$("logButton").addEventListener("click", showEventLogModal);
+$("settingsButton").addEventListener("click", showSettingsModal);
 $("resetButton").addEventListener("click", resetGame);
 $("closeModal").addEventListener("click", closeModal);
 $("modalBackdrop").addEventListener("click", (event) => {
