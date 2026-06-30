@@ -291,8 +291,10 @@ function initialState() {
     logs: ["小さなランドセルで、人生リプレイが始まった。"],
     mode: "start",
     pendingEvent: null,
+    eventDialogueIndex: 0,
     pendingOutcome: null,
     pendingExamReveal: null,
+    pendingStageTransition: null,
     afterOutcome: null,
     afterOutcomeKey: "",
     effectBuffer: null,
@@ -751,6 +753,7 @@ function serializeStateForSave() {
     save.pendingEventResume = true;
     save.pendingEventTitle = state.pendingEvent?.title || "";
     save.pendingEvent = null;
+    save.eventDialogueIndex = state.eventDialogueIndex || 0;
   }
   if (save.mode === "examReveal") {
     save.mode = "action";
@@ -788,6 +791,8 @@ function restoreStateFromSave(saveData) {
   restored.cramSchoolExperience = Boolean(restored.cramSchoolExperience || restored.cramSchool);
   restored.confirmedHighSchoolRoute = restored.confirmedHighSchoolRoute || "";
   restored.highSchoolRouteLog = { club: 0, academic: 0, socialWall: 0, academicWall: 0, skillWall: 0, starter: "", coachTrust: 0, teamTrust: 0, playJudgment: 0, tournamentFlow: 0, tournamentResult: "", mockRank: "", mockBonus: 0, quizCorrect: 0, quizAttempts: 0, cramTiming: "", ...(restored.highSchoolRouteLog || {}) };
+  restored.eventDialogueIndex = clamp(Number(restored.eventDialogueIndex) || 0, 0, 99);
+  restored.pendingStageTransition = restored.pendingStageTransition || null;
   restored.effectBuffer = null;
   restored.savedRun = null;
   restored.saveStatus = "";
@@ -801,6 +806,7 @@ function restoreStateFromSave(saveData) {
   }
   if (restored.mode === "outcome" && !restored.pendingOutcome) restored.mode = "action";
   if (restored.mode === "examReveal") restored.mode = "action";
+  if (restored.mode === "stageTransition" && !restored.pendingStageTransition) restored.mode = "action";
   return restored;
 }
 
@@ -831,6 +837,7 @@ function currentSaveData() {
 }
 
 function displayChapterTitle(info) {
+  if (state.mode === "stageTransition") return "新しいステージへ";
   if (state.mode === "action") return "今月の選択";
   return info.title;
 }
@@ -856,9 +863,11 @@ function statHtml() {
 
 function renderMain() {
   $("chanceBox").classList.add("hidden");
+  $("choices").className = "choices";
   const info = currentInfo();
   if (state.mode === "start") return renderStart();
   if (state.mode === "outcome") return renderOutcome();
+  if (state.mode === "stageTransition") return renderStageTransition();
   if (state.mode === "examReveal") return renderExamReveal();
   if (state.mode === "event") return renderEvent();
   if (state.mode === "result") return renderResult();
@@ -873,6 +882,25 @@ function renderMain() {
     button.addEventListener("click", () => doAction(button.dataset.action));
   });
   renderChance();
+}
+
+function renderStageTransition() {
+  const transition = state.pendingStageTransition || stageTransitionFor("", currentInfo().stage);
+  $("message").textContent = transition.narration;
+  $("choices").className = `choices event-stage event-stage-transition`;
+  $("choices").innerHTML = `
+    <div class="stage-transition-panel">
+      <p class="event-kicker">新しいステージへ</p>
+      <h2>${escapeHtml(transition.nextStage)}</h2>
+      <button class="primary-button next-button" id="continueStageTransition" type="button">次へ</button>
+    </div>
+  `;
+  $("continueStageTransition").addEventListener("click", () => {
+    state.pendingStageTransition = null;
+    state.mode = "action";
+    $("choices").className = "choices";
+    render();
+  });
 }
 
 function renderStart() {
@@ -917,6 +945,7 @@ function startNewGameFromTitle() {
   state.playerName = input || "あなた";
   ensureStorageLayer().upsertPlayer(state.playerName).catch((error) => console.warn(error));
   state.pendingEvent = childhoodEvent();
+  state.eventDialogueIndex = 0;
   state.mode = "event";
   render();
 }
@@ -959,6 +988,7 @@ function renderOutcome() {
   const cards = effects.cards || [];
   const notices = effects.notices || [];
   $("message").textContent = outcome.text;
+  $("choices").className = "choices event-stage event-outcome";
   $("choices").innerHTML = `
     <div class="outcome-stage">
       <h2>今回の結果</h2>
@@ -1010,16 +1040,43 @@ function monthPrompt(info) {
 function availableActions() {
   const stage = currentInfo().stage;
   const keys = [...state.unlocked].filter((key) => {
-    if (key === "lesson") return stage === "小学校" || (stage === "中学校" && state.lesson !== "サッカー" && state.lessonStatus !== "club");
+    if (key === "lesson") return shouldShowLessonAction(stage);
     if (key === "exam") return shouldShowExamAction();
     return true;
   });
-  if (state.turnIndex >= 13) keys.push("club");
+  if (shouldShowClubAction(stage)) keys.push("club");
   if (shouldShowExamAction()) keys.push("exam");
   if (stage === "高校" || stage === "大学" || stage === "社会に出る前") keys.push(...maturedLessonActions());
   if (shouldShowRomanceAction()) keys.push("romance");
   if (state.turnIndex >= 30) keys.push("work", ...universityActionKeys());
-  return [...new Set(keys)].filter((key) => actions[key]).map((key) => [key, actions[key]]);
+  return [...new Set(keys)].filter((key) => actions[key]).map((key) => [key, actionForDisplay(key)]);
+}
+
+function shouldShowLessonAction(stage) {
+  if (state.lessonStatus === "quit" || !state.lesson) return false;
+  if (stage === "小学校") return true;
+  if (stage !== "中学校") return false;
+  if (state.lesson === "サッカー" || state.lessonStatus === "club") return false;
+  return state.lesson === "英会話" && hasAcademicRoute();
+}
+
+function shouldShowClubAction(stage) {
+  if (stage === "小学校") return false;
+  if (stage === "中学校") return state.turnIndex >= 13 && (hasClubStrongRoute() || state.lessonStatus === "club" || state.lesson === "サッカー");
+  if (stage === "高校") return isClubPathConfirmed() || state.lessonStatus === "club" || hasClubStrongRoute();
+  if (stage === "大学") return isClubPathConfirmed() || state.currentUniversityRoute === "sports_specialty";
+  return false;
+}
+
+function actionForDisplay(key) {
+  if (key === "lesson" && state.lesson === "英会話") {
+    return {
+      ...actions.lesson,
+      label: "英会話を続ける",
+      desc: "言葉を学びながら、知識を使う力も伸ばす。"
+    };
+  }
+  return actions[key];
 }
 
 function shouldShowExamAction() {
@@ -1061,6 +1118,7 @@ function universityActionKeys() {
 
 function doAction(key) {
   const action = actions[key];
+  const displayAction = actionForDisplay(key);
   recordAction(key);
   const energyBeforeAction = state.energy;
   const protectedLowEnergy = (key === "exam" && state.activeEffects.ramuneBoost) || (["club", "lesson"].includes(key) && state.activeEffects.tapingProtection);
@@ -1079,6 +1137,11 @@ function doAction(key) {
   const mod = key === "rest" ? 0 : energyMod() + moodMod() + boostFor(key, action);
   const gain = Math.max(0, (action.base || 0) + mod);
   const delta = action.fullRest ? { energyTo: 100, money: action.money || 0, cap: action.cap || 5 } : { energy: action.energy || 0, money: action.money || 0, cap: action.cap || 5 };
+  if (key === "lesson" && state.lesson === "英会話" && currentInfo().stage === "中学校") {
+    delta.energy = -14;
+    delta.money = -500;
+    delta.cap = Math.max(delta.cap || 0, 6);
+  }
   if (key === "rest" && energyBeforeAction < 20) delta.mood = Math.min(4, state.mood + 1);
   if (action.stat) delta[action.stat] = gain;
   if (action.secondStat) delta[action.secondStat] = Math.max(1, Math.floor(gain / 2));
@@ -1104,12 +1167,12 @@ function doAction(key) {
   }
   addHidden(action.hidden);
   consumeActiveEffectsForAction(key);
-  log(`${action.label}を選んだ。`);
+  log(`${displayAction.label}を選んだ。`);
   tickBoosts();
   maybeMilestoneCard(key);
   const effects = finishEffectCapture();
   const outcomeText = `${actionResultText(key)}${extraOutcomeText}`;
-  recordChoiceEntry({ label: action.label, actionKey: key, choiceText: outcomeText, effects });
+  recordChoiceEntry({ label: displayAction.label, actionKey: key, choiceText: outcomeText, effects });
   showOutcome(outcomeText, effects, afterMainAction);
 }
 
@@ -1159,13 +1222,16 @@ function recordChoiceEntry({ label, actionKey = "", choiceText = "", effects = {
 
 function recordAction(key) {
   const stage = currentInfo().stage;
-  const label = actions[key]?.label || key;
+  const label = actionForDisplay(key)?.label || actions[key]?.label || key;
   state.actionCounts[label] = (state.actionCounts[label] || 0) + 1;
   state.stageActionCounts[stage] = state.stageActionCounts[stage] || {};
   state.stageActionCounts[stage][label] = (state.stageActionCounts[stage][label] || 0) + 1;
 }
 
 function actionResultText(key) {
+  if (key === "lesson" && state.lesson === "英会話") {
+    return "英会話を続けた。\n知らない言葉を覚えるだけでなく、自分の考えを伝える練習にもなった。";
+  }
   return {
     study: "今日は集中して机に向かうことができた。\n苦手だった問題も、少しだけ分かるようになった。",
     play: "友達や自分の時間を楽しんだ。\n何気ない会話が、少しだけ世界を広げてくれた。",
@@ -1187,7 +1253,15 @@ function actionResultText(key) {
 
 function applyLessonFlavor(delta) {
   if (state.lesson === "ピアノ") addHidden({ 計画志向: 1, 自立志向: 1 });
-  if (state.lesson === "英会話") delta.academic = (delta.academic || 0) + 1;
+  if (state.lesson === "英会話") {
+    delta.academic = (delta.academic || 0) + 2;
+    delta.skill = (delta.skill || 0) + 1;
+    addHidden({ 探索志向: 1, 計画志向: 1 });
+  }
+  if (state.lesson === "サッカー") {
+    delta.skill = (delta.skill || 0) + 2;
+    addHidden({ 達成志向: 1, 挑戦志向: 1 });
+  }
   if (state.lesson === "プログラミング") delta.academic = (delta.academic || 0) + 1;
 }
 
@@ -1207,12 +1281,14 @@ function afterMainAction() {
   const fixed = fixedEventForTurn();
   if (fixed) {
     state.pendingEvent = fixed;
+    state.eventDialogueIndex = 0;
     state.mode = "event";
     render();
     return;
   }
   if (Math.random() < naturalEventRate()) {
     state.pendingEvent = randomNaturalEvent();
+    state.eventDialogueIndex = 0;
     state.mode = "event";
     render();
     return;
@@ -1237,7 +1313,7 @@ function fixedEventForTurn() {
   if (turn === 12) return juniorExamEvent();
   if (turn === 13) return routeEvent("中学校で大切にしたいこと", juniorRoutes());
   if (turn === 14 && state.lesson === "サッカー" && state.lessonStatus !== "club") return juniorSoccerClubIntroEvent();
-  if (turn === 14 && state.lesson && state.lessonStatus !== "quit") return juniorLessonDecisionEvent();
+  if (turn === 14 && state.lesson === "英会話" && state.lessonStatus !== "quit" && hasAcademicRoute()) return juniorLessonDecisionEvent();
   if (turn === 15 && hasAcademicRoute()) return academicFirstTestEvent();
   if (turn === 15 && hasClubStrongRoute()) return clubSeriousnessEvent();
   if (turn === 17 && hasAcademicRoute()) return academicPressureEvent();
@@ -1321,7 +1397,23 @@ function lessonReviewEvent() {
     title: "習い事を続けるか迷う日",
     choices: [
       { label: "今の習い事を続ける", text: `${state.lesson}を続けることにした。少し迷ったぶん、続ける理由が前よりはっきりした。`, apply: () => { changeStats({ skill: 2, cap: 5 }); addHidden({ 達成志向: 2, 安定志向: 1 }); addCard("続ける理由", "習い事", "Rare", "迷ったあとに続けると決めた時間は、少し強かった。"); } },
-      { label: "別の習い事に変える", text: "新しいことを試してみることにした。前の経験も、次の入口でちゃんと役に立った。", apply: () => { state.lesson = nextLessonType(); state.lessonStatus = "active"; state.unlocked.add("lesson"); changeStats({ skill: 2, social: 1, cap: 5 }); addHidden({ 探索志向: 2, 自立志向: 1 }); addCard(`新しい${state.lesson}`, "習い事", "Rare", "途中で変えることも、自分を知るための大切な選択だった。"); } },
+      { label: "別の習い事に変える", text: "新しいことを試してみることにした。前の経験も、次の入口でちゃんと役に立った。", apply: () => {
+        state.lesson = nextLessonType();
+        state.lessonStatus = "active";
+        state.unlocked.add("lesson");
+        if (state.lesson === "サッカー") {
+          state.soccerExperience = true;
+          leanRoute("club", 1);
+          changeStats({ skill: 3, cap: 5 });
+          addHidden({ 探索志向: 1, 達成志向: 1, 挑戦志向: 1 });
+        } else {
+          state.englishExperience = true;
+          leanRoute("academic", 1);
+          changeStats({ academic: 1, skill: 2, cap: 5 });
+          addHidden({ 探索志向: 2, 計画志向: 1 });
+        }
+        addCard(`新しい${state.lesson}`, "習い事", "Rare", "途中で変えることも、自分を知るための大切な選択だった。");
+      } },
       { label: "習い事をやめる", text: "いったん習い事から離れることにした。空いた時間に、別の自分が見えてきそうだ。", apply: () => { state.lessonStatus = "quit"; state.unlocked.delete("lesson"); changeStats({ social: 2, energy: 10, mood: Math.min(4, state.mood + 1), cap: 5 }); addHidden({ 探索志向: 2, 自立志向: 1 }); addCard("空いた放課後", "分岐", "Rare", "やめたことで、別の時間の使い方が始まった。"); } }
     ]
   };
@@ -1352,6 +1444,54 @@ function enterJuniorSoccerClub() {
 }
 
 function juniorLessonDecisionEvent() {
+  if (state.lesson === "英会話") {
+    return {
+      title: "中学生になって、英会話をどう続ける？",
+      choices: [
+        {
+          label: "英会話を続ける",
+          text: "学校の勉強とは少し違うけれど、言葉を使って考えを伝える時間は、学び方そのものを広げてくれた。",
+          apply: () => {
+            state.lessonStatus = "active";
+            state.englishExperience = true;
+            state.unlocked.add("lesson");
+            leanRoute("academic", 2);
+            recordAcademicRouteExperience("englishContinuation", { inquiry: 1, collaboration: 1 });
+            changeStats({ academic: 3, skill: 4, energy: -8, cap: 6 });
+            addHidden({ 探索志向: 1, 計画志向: 1 });
+            addCard("初めての英会話ノート", "勉強", "Rare", "知らない言葉を書き写すたび、外の世界が少し近づいた。");
+          }
+        },
+        {
+          label: "勉強量を増やす",
+          text: "英会話で覚えた言葉を、学校の勉強にもつなげることにした。机に向かう時間が少し増えた。",
+          apply: () => {
+            state.lessonStatus = "active";
+            state.englishExperience = true;
+            state.unlocked.add("lesson");
+            leanRoute("academic", 2);
+            recordAcademicRouteExperience("studyVolume", { pressure: 1 });
+            changeStats({ academic: 5, skill: 1, energy: -10, cap: 6 });
+            addHidden({ 計画志向: 2, 達成志向: 1 });
+            addCard("赤ペンだらけのノート", "勉強", "Rare", "間違えた跡が、次に進むための小さな地図になった。");
+          }
+        },
+        {
+          label: "生活リズムを整える",
+          text: "続けるためには、休む時間も必要だった。焦りすぎず、学校生活のリズムを整えることにした。",
+          apply: () => {
+            state.lessonStatus = "active";
+            state.englishExperience = true;
+            state.unlocked.add("lesson");
+            leanRoute("academic", 1);
+            changeStats({ energy: 10, mood: Math.min(4, state.mood + 1), academic: 1, cap: 5 });
+            addHidden({ 安定志向: 2 });
+            addCard("続ける理由", "習い事", "Rare", "無理なく続ける形を探した時間も、ちゃんと積み重なっていった。");
+          }
+        }
+      ]
+    };
+  }
   return {
     title: "中学生になって、習い事をどうする？",
     choices: [
@@ -1584,6 +1724,7 @@ function clubCheck(primary, threshold, bonus = 0) {
 function routeEvent(title, routes) {
   return {
     title,
+    eventType: "route",
     choices: routes.map((route) => ({
       label: route.name,
       text: route.ok ? route.desc : `ロック：${route.need}`,
@@ -2182,12 +2323,20 @@ function themedEvent() {
     if (routeEvent) return routeEvent;
   }
   const pool = [...stageNaturalEvents(currentInfo().stage),
-    { title: "友達から急に遊びに誘われた。", choices: [
+    { title: "友達から急に遊びに誘われた。", dialogue: [
+      { speaker: "友達", text: "今日、帰りに少し寄り道しない？" },
+      { speaker: state.playerName, text: "どうしよう。少し疲れているけど、楽しそうでもある。" },
+      { speaker: "友達", text: "無理なら大丈夫。でも、最近ちょっと元気なさそうだったからさ。" }
+    ], choices: [
       choice("行く", "笑いすぎて帰り道が少し明るい。", { social: 2, energy: -10, mood: 3 }, { 協調志向: 2, 直感志向: 1 }),
       choice("今日は断って勉強する", "少し寂しいけれど、机に向かった。", { academic: 2, mood: 2 }, { 計画志向: 2 }),
       choice("既読をつけずに寝る", "疲れていた自分を守った。", { energy: 15, mood: 1 }, { 安定志向: 1 })
     ] },
-    { title: "小さな失敗をして、しばらく引きずっている。", choices: [
+    { title: "小さな失敗をして、しばらく引きずっている。", dialogue: [
+      { speaker: state.playerName, text: "あの時、もう少しうまくできた気がする。" },
+      { speaker: "先生", text: "失敗したあとにどうするかも、ちゃんと経験になるよ。" },
+      { speaker: state.playerName, text: "すぐ忘れるより、少し向き合ってみようかな。" }
+    ], choices: [
       choice("原因をメモする", "次に活かせる形に変えた。", { academic: 1, skill: 1, mood: 2 }, { 計画志向: 2, 達成志向: 1 }, "初めての敗北"),
       choice("誰かに話す", "笑って聞いてもらえて少し軽くなった。", { social: 2, mood: 3 }, { 協調志向: 2 }),
       choice("違うことを試す", "気分を変えたら、別の入口が見えた。", { skill: 2, energy: -5, mood: 3 }, { 探索志向: 2, 挑戦志向: 1 })
@@ -2197,7 +2346,11 @@ function themedEvent() {
       choice("必要なものだけ買う", "ほしいものと必要なものを考えた。", { money: Math.max(0, otoshidama() - stageMoneyCost()), skill: 1, mood: 3 }, { 計画志向: 1, 自立志向: 1 }),
       choice("友達と楽しむ", "思い出にも少し使った。", { money: -stageMoneyCost(), social: 2, mood: 4 }, { 協調志向: 2, 直感志向: 1 })
     ] },
-    { title: "いつもの帰り道で、少しだけ遠回りしたくなった。", choices: [
+    { title: "いつもの帰り道で、少しだけ遠回りしたくなった。", dialogue: [
+      { speaker: state.playerName, text: "今日は、まっすぐ帰らなくてもいい気がする。" },
+      { speaker: "心の声", text: "知らない道に入ったら、何か少し変わるだろうか。" },
+      { speaker: state.playerName, text: "ほんの少しだけ、違う景色を見てみたい。" }
+    ], choices: [
       choice("知らない道へ行く", "見慣れない景色に胸が弾んだ。", { skill: 1, social: 1, energy: -5, mood: 3 }, { 探索志向: 2, 挑戦志向: 1 }, "放課後の秘密基地"),
       choice("まっすぐ帰る", "いつもの安心が体に戻ってきた。", { energy: 8, mood: 2 }, { 安定志向: 2 }),
       choice("誰かを誘う", "遠回りが小さな冒険になった。", { social: 2, energy: -6, mood: 3 }, { 協調志向: 2 })
@@ -2320,8 +2473,8 @@ function stageNaturalEvents(stage) {
   return (stage === "小学校" ? elementary : stage === "中学校" ? middle : stage === "高校" ? high : stage === "大学" ? university : []).filter((item) => !item.condition || item.condition());
 }
 
-function event(title, choices, condition) {
-  return { title, choices, condition };
+function event(title, choices, condition, options = {}) {
+  return { title, choices, condition, ...options };
 }
 
 function relationshipChoice(label, text, affection, delta, cardName, canBecomePartner = false) {
@@ -2337,7 +2490,11 @@ function relationshipChoice(label, text, affection, delta, cardName, canBecomePa
 }
 
 function randomNaturalEvent() {
-  return themedEvent();
+  return markEventType(themedEvent(), "natural");
+}
+
+function markEventType(eventObject, eventType) {
+  return { ...eventObject, eventType: eventObject.eventType || eventType };
 }
 
 function choice(label, text, delta, hidden, cardName, extraApply) {
@@ -2360,21 +2517,74 @@ function stageMoneyCost() {
 
 function renderEvent() {
   const event = state.pendingEvent;
+  if (!event) {
+    state.mode = "action";
+    render();
+    return;
+  }
+  const eventType = eventTypeFor(event);
+  const dialogue = Array.isArray(event.dialogue) ? event.dialogue : [];
+  if (dialogue.length && state.eventDialogueIndex < dialogue.length) {
+    const line = dialogue[state.eventDialogueIndex];
+    $("message").textContent = event.title;
+    $("choices").className = `choices event-stage event-${eventType}`;
+    $("choices").innerHTML = `
+      <div class="event-panel event-${eventType}">
+        <p class="event-kicker">${escapeHtml(eventHeading(eventType))}</p>
+        <div class="dialogue-line">
+          <strong>${escapeHtml(line.speaker || "")}</strong>
+          <p>${escapeHtml(line.text || "")}</p>
+        </div>
+        <button class="primary-button next-button" id="nextDialogue" type="button">${state.eventDialogueIndex + 1 >= dialogue.length ? "選択する" : "次へ"}</button>
+      </div>
+    `;
+    $("nextDialogue").addEventListener("click", () => {
+      state.eventDialogueIndex += 1;
+      render();
+    });
+    return;
+  }
   const displayChoices = shuffle(event.choices);
   $("message").textContent = event.title;
-  $("choices").innerHTML = displayChoices.map((choiceItem, index) => `
-    <button class="choice-button ${choiceItem.locked ? "locked" : ""}" type="button" data-choice="${index}" ${choiceItem.locked ? "disabled" : ""}>
-      ${choiceItem.label}${choiceItem.locked ? "<small>まだ選べません</small>" : ""}
-    </button>
-  `).join("");
+  $("choices").className = `choices event-stage event-${eventType}`;
+  $("choices").innerHTML = `
+    <div class="event-panel event-${eventType}">
+      <p class="event-kicker">${escapeHtml(eventHeading(eventType))}</p>
+      <div class="event-choice-list">
+        ${displayChoices.map((choiceItem, index) => `
+          <button class="choice-button ${choiceItem.locked ? "locked" : ""}" type="button" data-choice="${index}" ${choiceItem.locked ? "disabled" : ""}>
+            ${choiceItem.label}${choiceItem.locked ? "<small>まだ選べません</small>" : ""}
+          </button>
+        `).join("")}
+      </div>
+    </div>
+  `;
   document.querySelectorAll("[data-choice]").forEach((button) => {
     button.addEventListener("click", () => resolveEvent(displayChoices[Number(button.dataset.choice)]));
   });
 }
 
+function eventTypeFor(eventObject) {
+  if (eventObject.eventType) return eventObject.eventType;
+  if ((eventObject.choices || []).some((choiceItem) => choiceItem.examReveal)) return "exam";
+  return "fixed";
+}
+
+function eventHeading(eventType) {
+  return {
+    fixed: "人生の分岐点",
+    natural: "日常の出来事",
+    route: "人生の分岐点",
+    exam: "運命の日",
+    stage: "新しいステージへ",
+    dialogue: "会話"
+  }[eventType] || "人生の分岐点";
+}
+
 function resolveEvent(choiceItem) {
   if (choiceItem.examReveal) {
     state.pendingEvent = null;
+    state.eventDialogueIndex = 0;
     state.pendingExamReveal = { ...choiceItem.examReveal, phase: "intro" };
     state.mode = "examReveal";
     render();
@@ -2388,6 +2598,7 @@ function resolveEvent(choiceItem) {
   log(`選択：${choiceItem.label}`);
   recordChoiceEntry({ label: choiceItem.label, actionKey: "event", choiceText: choiceItem.text || choiceItem.label, effects });
   state.pendingEvent = null;
+  state.eventDialogueIndex = 0;
   if (choiceItem.noTurnAdvance) {
     showOutcome(choiceItem.text || `${choiceItem.label}を選んだ。`, effects, () => {
       state.mode = "action";
@@ -2414,6 +2625,7 @@ function renderExamReveal() {
   }
   if (reveal.phase === "intro") {
     $("message").textContent = reveal.intro;
+    $("choices").className = "choices event-stage event-exam";
     $("choices").innerHTML = `
       <div class="exam-reveal intro">
         <p>封筒を開く手が、少しだけ震えている。</p>
@@ -2442,10 +2654,12 @@ function renderExamReveal() {
   }
   if (reveal.phase === "waiting") {
     $("message").textContent = "結果は……\n……\n……";
+    $("choices").className = "choices event-stage event-exam";
     $("choices").innerHTML = `<div class="exam-reveal waiting"><div class="waiting-dots"><span></span><span></span><span></span></div></div>`;
     return;
   }
   $("message").textContent = reveal.success ? reveal.successText : reveal.failureText;
+  $("choices").className = "choices event-stage event-exam";
   $("choices").innerHTML = `
     <div class="exam-result ${reveal.success ? "success" : "failure"}">
       <div class="exam-burst" aria-hidden="true"></div>
@@ -2472,12 +2686,28 @@ function nextTurn() {
     const prevStage = currentInfo().stage;
     state.turnIndex += 1;
     const nextStage = currentInfo().stage;
-    if (prevStage !== nextStage) addCard(`${prevStage}のアルバム`, "ステージ", "Rare", `${prevStage}で過ごした日々を一冊にまとめた。`);
+    if (prevStage !== nextStage) {
+      addCard(`${prevStage}のアルバム`, "ステージ", "Rare", `${prevStage}で過ごした日々を一冊にまとめた。`);
+      state.pendingStageTransition = stageTransitionFor(prevStage, nextStage);
+      state.mode = "stageTransition";
+    } else {
+      state.mode = "action";
+    }
     if (state.turnIndex === timeline.length - 1) state.mode = "result";
   } else {
     state.mode = "result";
   }
   render();
+}
+
+function stageTransitionFor(prevStage, nextStage) {
+  const narration = {
+    "小学校->中学校": "小学校生活が終わった。\nランドセルを置き、少し大きな制服に袖を通す。\nここから、中学校生活が始まる。",
+    "中学校->高校": "中学校生活が終わった。\n部活、勉強、友達との時間を抱えたまま、新しい校舎へ向かう。\nここから、高校生活が始まる。",
+    "高校->大学": "高校生活が終わった。\n決められた時間割から少し離れ、自由な時間が増えていく。\nここから、大学生活が始まる。",
+    "大学->社会に出る前": "大学生活が終わろうとしている。\n選んできた道が、少しずつ自分の輪郭になっていた。\n社会に出る前に、これまでの人生を振り返る。"
+  }[`${prevStage}->${nextStage}`] || `${prevStage}が終わり、${nextStage}が始まる。`;
+  return { eventType: "stage", prevStage, nextStage, narration };
 }
 
 function maybeMilestoneCard(key) {
