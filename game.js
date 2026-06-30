@@ -18,6 +18,7 @@ const cardCatalog = [
   "全国への切符", "優勝メダル", "最後のラストパス", "PK前の静けさ",
   "初めての模試判定", "C判定の紙", "夏期講習のテキスト", "最終模試の結果",
   "もう一度開いた参考書", "大学受験直前の机", "解けなかった一問",
+  "白い天井", "休む勇気",
   "小学校のアルバム", "中学校のアルバム", "高校のアルバム", "大学のアルバム"
 ].map((name, index) => ({
   id: cardIdFromName(name),
@@ -432,6 +433,7 @@ function inferCardCategory(name) {
   if (["初めてのスパイク", "朝練の記憶", "練習ノート", "初めての背番号", "ベンチから見た景色", "監督の一言", "最後の円陣", "後輩に託した言葉", "キャプテンマーク", "スタメン発表の日", "ベンチから見たピッチ", "夏合宿の夜", "選手権の初戦", "ロッカールームの沈黙", "全国への切符", "優勝メダル", "最後のラストパス", "PK前の静けさ"].includes(name)) return "部活";
   if (["初めての英会話ノート", "塾の体験授業", "初めての順位表", "赤ペンだらけのノート", "放課後の教え合い", "夜の自習室", "問いを書いたノート", "探究発表の資料", "模試の判定", "志望校のパンフレット", "合格発表の掲示板", "初めての模試判定", "C判定の紙", "夏期講習のテキスト", "最終模試の結果", "もう一度開いた参考書", "大学受験直前の机", "解けなかった一問"].includes(name)) return "勉強";
   if (["初めてのゼミ発表", "グループワークの沈黙", "インターン選考の通知", "面接官の問い", "サークルの集合写真", "留学の航空券", "最初の企画書", "最後の自己分析ノート"].includes(name)) return "大学";
+  if (["白い天井", "休む勇気"].includes(name)) return "休息";
   if (name.includes("受験") || name.includes("参考書") || name.includes("鉛筆") || name.includes("図鑑")) return "勉強";
   if (name.includes("友") || name.includes("班") || name.includes("文化祭") || name.includes("告白") || name.includes("価値観")) return "人間関係";
   if (name.includes("給料") || name.includes("名刺") || name.includes("リリース")) return "仕事";
@@ -443,7 +445,7 @@ function inferCardCategory(name) {
 function inferCardRarity(name) {
   if (["初めての背番号", "ベンチから見た景色", "キャプテンマーク", "監督の一言", "後輩に託した言葉", "全国への切符", "優勝メダル", "最後のラストパス", "PK前の静けさ"].includes(name)) return "epic";
   if (["夜の自習室", "模試の判定", "合格発表の掲示板", "面接官の問い", "インターン選考の通知", "留学の航空券", "最終模試の結果", "大学受験直前の机"].includes(name)) return "epic";
-  if (["初めての順位表", "赤ペンだらけのノート", "放課後の教え合い", "問いを書いたノート", "志望校のパンフレット"].includes(name)) return "rare";
+  if (["初めての順位表", "赤ペンだらけのノート", "放課後の教え合い", "問いを書いたノート", "志望校のパンフレット", "白い天井", "休む勇気"].includes(name)) return "rare";
   if (name.includes("不合格") || name.includes("開かれた") || name.includes("失敗した企画書") || name.includes("知らない街")) return "epic";
   if (name.includes("告白") || name.includes("価値観") || name.includes("アルバム") || name.includes("給料") || name.includes("入部届")) return "rare";
   return "common";
@@ -1060,6 +1062,7 @@ function universityActionKeys() {
 function doAction(key) {
   const action = actions[key];
   recordAction(key);
+  const energyBeforeAction = state.energy;
   const protectedLowEnergy = (key === "exam" && state.activeEffects.ramuneBoost) || (["club", "lesson"].includes(key) && state.activeEffects.tapingProtection);
   if (state.energy < 20 && key !== "rest" && !protectedLowEnergy) {
     startEffectCapture();
@@ -1067,6 +1070,7 @@ function doAction(key) {
     addHidden({ 安定志向: 1 });
     addCard("布団の中の作戦会議", "休息", "Common", "動けない日にも、次のための静かな準備があった。");
     log("体力が足りず、予定はうまく進まなかった。少し休んで立て直した。");
+    addEnergyWarningIfNeeded();
     showOutcome("体が重くて、予定していたことはうまく進まなかった。\n今日は少し休んで、次に動くための時間にした。", finishEffectCapture(), nextTurn);
     return;
   }
@@ -1075,6 +1079,7 @@ function doAction(key) {
   const mod = key === "rest" ? 0 : energyMod() + moodMod() + boostFor(key, action);
   const gain = Math.max(0, (action.base || 0) + mod);
   const delta = action.fullRest ? { energyTo: 100, money: action.money || 0, cap: action.cap || 5 } : { energy: action.energy || 0, money: action.money || 0, cap: action.cap || 5 };
+  if (key === "rest" && energyBeforeAction < 20) delta.mood = Math.min(4, state.mood + 1);
   if (action.stat) delta[action.stat] = gain;
   if (action.secondStat) delta[action.secondStat] = Math.max(1, Math.floor(gain / 2));
   if (key === "lesson") applyLessonFlavor(delta);
@@ -1083,14 +1088,53 @@ function doAction(key) {
     if (["study", "exam", "language"].includes(key) || (key === "lesson" && state.lesson === "英会話")) leanRoute("academic", 1);
   }
   changeStats(delta);
+  let extraOutcomeText = "";
+  if (key === "rest" && energyBeforeAction < 20 && !state.cards.some((card) => card.name === "休む勇気")) {
+    addCard("休む勇気", "休息", "Rare", "前に進むために、あえて立ち止まることを選んだ。");
+  }
+  if (shouldTriggerHospitalEvent(key, action, delta)) {
+    extraOutcomeText = applyHospitalEvent();
+  } else {
+    addEnergyWarningIfNeeded();
+  }
   addHidden(action.hidden);
   consumeActiveEffectsForAction(key);
   log(`${action.label}を選んだ。`);
   tickBoosts();
   maybeMilestoneCard(key);
   const effects = finishEffectCapture();
-  recordChoiceEntry({ label: action.label, actionKey: key, choiceText: actionResultText(key), effects });
-  showOutcome(actionResultText(key), effects, afterMainAction);
+  const outcomeText = `${actionResultText(key)}${extraOutcomeText}`;
+  recordChoiceEntry({ label: action.label, actionKey: key, choiceText: outcomeText, effects });
+  showOutcome(outcomeText, effects, afterMainAction);
+}
+
+function shouldTriggerHospitalEvent(key, action, delta) {
+  if (key === "rest" || action.fullRest) return false;
+  return (delta.energy || 0) < 0 && state.energy === 0;
+}
+
+function applyHospitalEvent() {
+  const text = "\n\n無理を続けた結果、体が限界を迎えた。\n気づいたときには、病院のベッドの上だった。\nしばらく休むことになり、積み上げていた感覚も少し鈍ってしまった。";
+  changeStats({
+    energyTo: 40,
+    academic: -2,
+    skill: -2,
+    social: -1,
+    mood: Math.max(0, state.mood - 1),
+    cap: 8
+  });
+  addCard("白い天井", "休息", "Rare", "無理を続けた先で、休むことも人生の一部だと知った。");
+  addNotice("病院でしばらく休むことになった。無理を続けるリスクを、体が教えてくれた。", "special");
+  log("体力が尽きて病院に運ばれた。しばらく休むことになった。");
+  return text;
+}
+
+function addEnergyWarningIfNeeded() {
+  if (state.energy < 15) {
+    addNotice("体がかなり重い。このまま無理をすると倒れてしまうかもしれない。", "strong");
+  } else if (state.energy < 30) {
+    addNotice("少し疲れが溜まっている。そろそろ休むことも考えた方がよさそうだ。", "normal");
+  }
 }
 
 function recordChoiceEntry({ label, actionKey = "", choiceText = "", effects = {} }) {
@@ -1137,7 +1181,6 @@ function actionResultText(key) {
 }
 
 function applyLessonFlavor(delta) {
-  if (state.lesson === "サッカー") delta.social = (delta.social || 0) + 1;
   if (state.lesson === "ピアノ") addHidden({ 計画志向: 1, 自立志向: 1 });
   if (state.lesson === "英会話") delta.academic = (delta.academic || 0) + 1;
   if (state.lesson === "プログラミング") delta.academic = (delta.academic || 0) + 1;
