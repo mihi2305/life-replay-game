@@ -1010,7 +1010,7 @@ function monthPrompt(info) {
 function availableActions() {
   const stage = currentInfo().stage;
   const keys = [...state.unlocked].filter((key) => {
-    if (key === "lesson") return stage === "小学校" || stage === "中学校";
+    if (key === "lesson") return stage === "小学校" || (stage === "中学校" && state.lesson !== "サッカー" && state.lessonStatus !== "club");
     if (key === "exam") return shouldShowExamAction();
     return true;
   });
@@ -1083,6 +1083,11 @@ function doAction(key) {
   if (action.stat) delta[action.stat] = gain;
   if (action.secondStat) delta[action.secondStat] = Math.max(1, Math.floor(gain / 2));
   if (key === "lesson") applyLessonFlavor(delta);
+  if (key === "club" && currentInfo().stage === "中学校" && state.lesson === "サッカー") {
+    delta.skill = Math.max(1, (delta.skill || 0) - 1);
+    delta.social = (delta.social || 0) + 1;
+    addHidden({ 協調志向: 1, 安定志向: 1 });
+  }
   if (currentInfo().stage === "小学校" || currentInfo().stage === "中学校") {
     if (["club", "lesson"].includes(key) && (state.lesson === "サッカー" || key === "club")) leanRoute("club", 1);
     if (["study", "exam", "language"].includes(key) || (key === "lesson" && state.lesson === "英会話")) leanRoute("academic", 1);
@@ -1231,6 +1236,7 @@ function fixedEventForTurn() {
   if (turn === 11 && state.cramSchool) return juniorMockExamEvent();
   if (turn === 12) return juniorExamEvent();
   if (turn === 13) return routeEvent("中学校で大切にしたいこと", juniorRoutes());
+  if (turn === 14 && state.lesson === "サッカー" && state.lessonStatus !== "club") return juniorSoccerClubIntroEvent();
   if (turn === 14 && state.lesson && state.lessonStatus !== "quit") return juniorLessonDecisionEvent();
   if (turn === 15 && hasAcademicRoute()) return academicFirstTestEvent();
   if (turn === 15 && hasClubStrongRoute()) return clubSeriousnessEvent();
@@ -1284,7 +1290,7 @@ function lessonEvent() {
           if (name === "サッカー") {
             state.soccerExperience = true;
             leanRoute("club", 2);
-            changeStats({ skill: 4, social: 1, energy: 8, cap: 6 });
+            changeStats({ skill: 4, energy: 8, mood: Math.min(4, state.mood + 1), cap: 6 });
             addCard("初めてのスパイク", "部活", "Rare", "ボールを追いかける時間が、チームで動く感覚の入口になった。");
           } else {
             state.englishExperience = true;
@@ -1305,7 +1311,7 @@ function lessonEvent() {
 
 function lessonHidden(name) {
   return {
-    サッカー: { 協調志向: 2, 達成志向: 1 },
+    サッカー: { 挑戦志向: 2, 自立志向: 1, 達成志向: 1 },
     英会話: { 探索志向: 2, 計画志向: 1 }
   }[name] || {};
 }
@@ -1324,6 +1330,25 @@ function lessonReviewEvent() {
 function nextLessonType() {
   const options = ["サッカー", "英会話"].filter((name) => name !== state.lesson);
   return options[Math.floor(Math.random() * options.length)];
+}
+
+function juniorSoccerClubIntroEvent() {
+  return {
+    title: "中学校に入学した。小学生の頃から続けてきたサッカーを、今度は学校の部活として続けることになった。同じサッカーでも、ここからは少し違う。先輩、顧問、レギュラー争い、チームのルール。あなたの中学校生活が始まる。",
+    choices: [
+      { label: "まずは先輩の練習についていく", text: "小学校の頃より、練習の空気はずっと速かった。技術だけではなく、声を聞き、流れに入ることが必要だった。", apply: () => { enterJuniorSoccerClub(); changeStats({ skill: 2, social: 2, energy: -8, cap: 5 }); addHidden({ 協調志向: 2, 達成志向: 1 }); addCard("放課後の入部届", "部活", "Rare", "小学校の習い事が、中学校の部活へ形を変えた。"); } },
+      { label: "顧問の話をよく聞く", text: "顧問は「うまいだけでは試合には出られない」と言った。チームの約束を知るところから、中学サッカーが始まった。", apply: () => { enterJuniorSoccerClub(); changeStats({ academic: 1, social: 1, skill: 1, cap: 5 }); addHidden({ 計画志向: 1, 安定志向: 1, 協調志向: 1 }); addCard("練習ノート", "部活", "Rare", "チームの中で動くために、まずルールと言葉を覚えた。"); } },
+      { label: "チームメイトに声をかける", text: "同じ学年の部員と、少しぎこちなく話した。ここからは、一人でうまくなるだけでは進めない。", apply: () => { enterJuniorSoccerClub(); changeStats({ social: 3, skill: 1, mood: Math.min(4, state.mood + 1), cap: 5 }); addHidden({ 協調志向: 2, 直感志向: 1 }); addCard("砂場の友達", "人間関係", "Common", "新しいチームで、また人との距離を作り始めた。"); } }
+    ]
+  };
+}
+
+function enterJuniorSoccerClub() {
+  state.lessonStatus = "club";
+  state.unlocked.delete("lesson");
+  state.clubRoute.active = true;
+  leanRoute("club", 2);
+  recordClubRouteExperience("juniorSoccerClub", { support: 1 });
 }
 
 function juniorLessonDecisionEvent() {
