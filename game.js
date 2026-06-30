@@ -867,6 +867,17 @@ function stageAvatar(stage) {
   }[stage] || "🙂";
 }
 
+function characterImageFor(info) {
+  if (info.stage === "小学校") return "character/elementary.png";
+  if (info.stage === "中学校") return "character/junior_high.png";
+  if (info.stage === "高校") {
+    if (isClubPathConfirmed() || state.lesson === "サッカー" || hasClubStrongRoute()) return "character/high_soccer.png";
+    return "character/high_study.png";
+  }
+  if (info.stage === "大学" || info.stage === "社会に出る前") return "character/university.png";
+  return "character/elementary.png";
+}
+
 function staminaTone(value) {
   if (value < 25) return "low";
   if (value < 55) return "mid";
@@ -889,7 +900,17 @@ function renderTopStatusBar(info) {
 
 function renderStageView(info) {
   $("stageView").className = `stage-view ${stageClassName(info.stage)}`;
-  $("characterAvatar").textContent = stageAvatar(info.stage);
+  const image = $("characterImage");
+  const fallback = $("characterFallback");
+  image.alt = `${state.playerName || "主人公"} ${info.stage}`;
+  image.classList.remove("hidden");
+  fallback.classList.add("hidden");
+  fallback.textContent = stageAvatar(info.stage);
+  image.onerror = () => {
+    image.classList.add("hidden");
+    fallback.classList.remove("hidden");
+  };
+  image.src = characterImageFor(info);
   $("characterName").textContent = state.playerName || "あなた";
 }
 
