@@ -126,7 +126,7 @@ function hasClubStrongRoute() {
 }
 
 function hasClubStrongHighSchool() {
-  return state.routes.includes("部活強豪校") || state.routeChoices.includes("部活強豪校");
+  return state.routes.includes("高校部活ルート") || state.routeChoices.includes("高校部活ルート") || state.routes.includes("部活強豪校") || state.routeChoices.includes("部活強豪校");
 }
 
 function hasAcademicRoute() {
@@ -134,7 +134,7 @@ function hasAcademicRoute() {
 }
 
 function hasAdvancedHighSchool() {
-  return Boolean(state.academicRoute?.highSchool || state.routes.includes("偏差値上位高校") || state.routeChoices.includes("偏差値上位高校"));
+  return Boolean(state.academicRoute?.highSchool || state.routes.includes("高校勉強ルート") || state.routeChoices.includes("高校勉強ルート") || state.routes.includes("偏差値上位高校") || state.routeChoices.includes("偏差値上位高校"));
 }
 
 function recordClubRouteExperience(kind, values = {}) {
@@ -708,7 +708,7 @@ function currentInfo() {
 function render() {
   const info = currentInfo();
   $("stageName").textContent = info.stage;
-  $("turnLabel").textContent = `${info.turn} / 45`;
+  $("turnLabel").textContent = `${info.turn} / ${timeline.length}`;
   $("yearLabel").textContent = info.date;
   $("chapterTitle").textContent = displayChapterTitle(info);
   $("stats").innerHTML = statHtml();
@@ -761,7 +761,7 @@ function serializeStateForSave() {
 
 function restoreStateFromSave(saveData) {
   const restored = { ...initialState(), ...(saveData || {}) };
-  restored.turnIndex = clamp(Number(restored.turnIndex) || 0, 0, 44);
+  restored.turnIndex = clamp(Number(restored.turnIndex) || 0, 0, timeline.length - 1);
   restored.unlocked = new Set(Array.isArray(restored.unlocked) ? restored.unlocked : ["study", "play", "rest"]);
   restored.hidden = { ...Object.fromEntries(hiddenKeys.map((key) => [key, 0])), ...(restored.hidden || {}) };
   restored.recentHidden = { ...Object.fromEntries(hiddenKeys.map((key) => [key, 0])), ...(restored.recentHidden || {}) };
@@ -877,7 +877,7 @@ function renderMain() {
 
 function renderStart() {
   $("stageName").textContent = "はじまり";
-  $("turnLabel").textContent = "0 / 45";
+  $("turnLabel").textContent = `0 / ${timeline.length}`;
   $("yearLabel").textContent = "幼稚園";
   $("chapterTitle").textContent = "名前を入力";
   const saveData = currentSaveData();
@@ -1236,10 +1236,9 @@ function fixedEventForTurn() {
   if (turn === 15 && hasClubStrongRoute()) return clubSeriousnessEvent();
   if (turn === 17 && hasAcademicRoute()) return academicPressureEvent();
   if (turn === 17 && hasClubStrongRoute()) return clubRegularCompetitionEvent();
-  if (turn === 19 && hasAcademicRoute()) return academicHighSchoolAimEvent();
   if (turn === 19) return routeEvent("高校受験で目指す場所", highSchoolRoutes());
   if (turn === 20 && hasClubStrongRoute()) return clubFinalTournamentEvent();
-  if (turn === 21) return highSchoolDecisionEvent();
+  if (turn === 21 && !state.confirmedHighSchoolRoute) return highSchoolDecisionEvent();
   if (turn === 22 && isClubPathConfirmed()) return highSchoolClubFirstWallEvent();
   if (turn === 22 && isAcademicPathConfirmed()) return highSchoolAcademicFirstWallEvent();
   if (turn === 23 && isClubPathConfirmed()) return highSchoolClubPlayJudgmentEvent();
@@ -1262,8 +1261,8 @@ function fixedEventForTurn() {
   if (turn === 37) return universityRouteDevelopmentEvent();
   if (turn === 38 && isAcademicPathConfirmed()) return universityInternSelectionEvent();
   if (turn === 43) return albumReflectEvent();
-  if (turn === 44) return finalValueEvent();
-  if (turn === 45) {
+  if (turn === timeline.length - 1) return finalValueEvent();
+  if (turn === timeline.length) {
     state.mode = "result";
     return null;
   }
@@ -1565,6 +1564,15 @@ function routeEvent(title, routes) {
       text: route.ok ? route.desc : `ロック：${route.need}`,
       locked: !route.ok,
       apply: () => {
+        if (route.name === "高校部活ルート" || route.name === "高校勉強ルート") {
+          const routeKey = route.name === "高校部活ルート" ? "club" : "academic";
+          confirmHighSchoolRoute(routeKey);
+          changeStats(route.delta || {});
+          addHidden(route.hidden || {});
+          addCard(route.card || route.name, "ルート", route.rarity || "Rare", route.desc);
+          addNotice(`高校からの進路が「${route.name}」に確定しました。`, "special");
+          return;
+        }
         state.routes.push(route.name);
         state.routeChoices.push(route.name);
         if (route.name === "勉強ルート" || route.name === "進学校準備ルート") { state.academicRoute.active = true; leanRoute("academic", 2); }
@@ -1593,14 +1601,12 @@ function juniorRoutes() {
 }
 
 function highSchoolRoutes() {
-  const clubQualified = state.skill >= 70 || (hasClubStrongRoute() && state.skill >= 55) || (state.clubRoute.eventCount >= 2 && state.skill >= 50);
-  const academicQualified = state.academic >= 70 || (hasAcademicRoute() && state.academic >= 55) || (state.academicRoute.eventCount >= 2 && state.academic >= 50) || (state.academicRoute.topSchoolAim && state.academic >= 48);
+  const clubQualified = state.skill >= 40 || hasClubStrongRoute() || state.soccerExperience || (state.routeLean?.club || 0) >= 2 || (state.clubRoute.eventCount || 0) >= 1;
+  const academicQualified = state.academic >= 40 || hasAcademicRoute() || state.cramSchool || state.cramSchoolExperience || state.englishExperience || (state.routeLean?.academic || 0) >= 2 || (state.academicRoute.eventCount || 0) >= 1;
+  const fallback = !clubQualified && !academicQualified ? preferredHighSchoolRoute() : "";
   return [
-    route("偏差値上位高校", academicQualified, "学力B以上 または 進学校準備ルートで経験を積む", "高い目標に囲まれる高校生活。", { academic: 4, energy: -8 }, { 計画志向: 2, 達成志向: 2 }),
-    route("部活強豪校", clubQualified, "スキルB以上 または 部活強豪ルートで経験を積む", "練習と大会が生活の中心になる。", { skill: 4, energy: -10 }, { 達成志向: 3 }),
-    route("人間関係充実高校", state.social >= 70, "社交性B以上", "友達、文化祭、恋愛の多い日々。", { social: 4 }, { 協調志向: 2, 直感志向: 2 }),
-    route("特色・専門高校", state.skill >= 55, "スキルC以上", "個性と専門性を伸ばす環境。", { skill: 4 }, { 自立志向: 2, 探索志向: 2 }),
-    route("地元高校", true, "常に選択可能", "慣れた街で自由に育つ。", { energy: 10 }, { 安定志向: 2 })
+    route("高校部活ルート", clubQualified || fallback === "club", "スキルD以上・部活経験・サッカー経験・部活寄りの積み重ね", "高校生活の中心を部活に置く。技術だけでなく、仲間と勝負する力も問われていく。", { skill: 3, social: 1, energy: -6, cap: 6 }, { 達成志向: 2, 協調志向: 1 }, "合格発表の掲示板", "Epic"),
+    route("高校勉強ルート", academicQualified || fallback === "academic", "学力D以上・塾経験・英会話経験・勉強寄りの積み重ね", "高校生活の中心を勉強に置く。考える力を伸ばしながら、知識を形にする力も問われていく。", { academic: 3, skill: 1, energy: -6, cap: 6 }, { 計画志向: 2, 探索志向: 1 }, "合格発表の掲示板", "Epic")
   ];
 }
 
@@ -1705,8 +1711,8 @@ function highSchoolConfirmChoice(routeKey, label, text) {
 function confirmHighSchoolRoute(routeKey) {
   state.confirmedHighSchoolRoute = routeKey;
   const routeName = routeKey === "club" ? "高校部活ルート" : "高校勉強ルート";
-  state.routes.push(routeName);
-  state.routeChoices.push(routeName);
+  if (!state.routes.includes(routeName)) state.routes.push(routeName);
+  if (!state.routeChoices.includes(routeName)) state.routeChoices.push(routeName);
   if (routeKey === "club") {
     state.clubRoute.highSchool = true;
     leanRoute("club", 3);
@@ -2365,7 +2371,7 @@ function resolveEvent(choiceItem) {
     return;
   }
   showOutcome(choiceItem.text || `${choiceItem.label}を選んだ。`, effects, () => {
-    if (state.turnIndex === 44) {
+    if (state.turnIndex === timeline.length - 1) {
       state.mode = "result";
       render();
       return;
@@ -2437,12 +2443,12 @@ function renderExamReveal() {
 }
 
 function nextTurn() {
-  if (state.turnIndex < 44) {
+  if (state.turnIndex < timeline.length - 1) {
     const prevStage = currentInfo().stage;
     state.turnIndex += 1;
     const nextStage = currentInfo().stage;
     if (prevStage !== nextStage) addCard(`${prevStage}のアルバム`, "ステージ", "Rare", `${prevStage}で過ごした日々を一冊にまとめた。`);
-    if (state.turnIndex === 44) state.mode = "result";
+    if (state.turnIndex === timeline.length - 1) state.mode = "result";
   } else {
     state.mode = "result";
   }
